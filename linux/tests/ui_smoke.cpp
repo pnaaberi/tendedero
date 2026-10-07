@@ -12,6 +12,7 @@
 #include <QScreen>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
 #include <iostream>
 #include <stdexcept>
 
@@ -44,6 +45,108 @@ int main(int argc, char **argv) {
     QImage fixture(120, 80, QImage::Format_ARGB32);
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
+    if (app.arguments().contains("--motion")) {
+      Panel motion(app.primaryScreen());
+      motion.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+      motion.show();
+      motion.setRevealed(true, false);
+      int restingY = motion.cardRect(0).top();
+      motion.setRevealed(false, false);
+      motion.setRevealed(true);
+      QElapsedTimer reveal;
+      reveal.start();
+      int furthestY = restingY;
+      while (reveal.elapsed() < 650) {
+        QTest::qWait(20);
+        furthestY = std::max(furthestY, motion.cardRect(0).top());
+      }
+      require(furthestY >= restingY + 3,
+              "spring reveal must visibly overshoot its resting position");
+      require(std::abs(motion.cardRect(0).top() - restingY) <= 2,
+              "spring reveal must settle back onto the line");
+      QTest::qWait(1000);
+      require(motion.action("copy", path), "copy must start its feedback motion");
+      QImage displayed = motion.renderFrame();
+      QRegion displayedInput = motion.mask();
+      QThread::msleep(110);
+      require(motion.renderFrame() == displayed && motion.mask() == displayedInput,
+              "cards must retain their displayed input pose between animation ticks");
+      QElapsedTimer wobble;
+      wobble.start();
+      int smallestHeight = 10000, largestHeight = 0;
+      bool clickedMovingEdge = false;
+      while (wobble.elapsed() < QApplication::doubleClickInterval() + 500) {
+        QTest::qWait(20);
+        QImage frame = motion.renderFrame();
+        QRect blueBounds;
+        QPoint movingEdge(-1, -1);
+        int edgeDisplacement = 0;
+        QRect restingHit = motion.cardRect(0).adjusted(-4, -12, 4, 4);
+        for (int y = 0; y < frame.height(); ++y)
+          for (int x = 0; x < frame.width(); ++x) {
+            QColor color = frame.pixelColor(x, y);
+            QPoint logical(int(x / frame.devicePixelRatio()),
+                           int(y / frame.devicePixelRatio()));
+            if (color == QColor("#3266dc")) {
+              blueBounds = blueBounds.united(QRect(x, y, 1, 1));
+              require(motion.mask().contains(logical),
+                      "the moving image must remain inside its input region");
+            }
+            if (color.alpha() > 200 &&
+                logical.y() > restingHit.center().y() &&
+                logical.y() < restingHit.bottom() - 5 &&
+                !restingHit.contains(logical)) {
+              int displacement = std::max(restingHit.left() - logical.x(),
+                                          logical.x() - restingHit.right());
+              if (displacement > edgeDisplacement) {
+                edgeDisplacement = displacement;
+                movingEdge = logical;
+              }
+            }
+          }
+        smallestHeight = std::min(smallestHeight, blueBounds.height());
+        largestHeight = std::max(largestHeight, blueBounds.height());
+        if (!clickedMovingEdge && movingEdge.x() >= 0) {
+          require(motion.mask().contains(movingEdge),
+                  "the moving card edge must receive input");
+          // Delayed event handling must still hit the card currently displayed.
+          QThread::msleep(QApplication::doubleClickInterval() + 50);
+          auto sendMouse = [&](QEvent::Type type, Qt::MouseButtons buttons) {
+            QMouseEvent event(type, QPointF(movingEdge), QPointF(movingEdge),
+                              motion.mapToGlobal(movingEdge), Qt::LeftButton,
+                              buttons, Qt::NoModifier);
+            QCoreApplication::sendEvent(&motion, &event);
+          };
+          app.clipboard()->clear();
+          sendMouse(QEvent::MouseButtonPress, Qt::LeftButton);
+          sendMouse(QEvent::MouseButtonRelease, Qt::NoButton);
+          const auto *copied = app.clipboard()->mimeData();
+          require(copied && copied->hasImage(),
+                  "clicking the moving card edge must still copy its image");
+          require(motion.mask().contains(movingEdge),
+                  "copy feedback must preserve the swinging edge's input region");
+          bool opened = false;
+          motion.onAction = [&](QString operation, QString openedPath) {
+            opened = operation == "open" && openedPath == path;
+          };
+          sendMouse(QEvent::MouseButtonDblClick, Qt::LeftButton);
+          sendMouse(QEvent::MouseButtonRelease, Qt::NoButton);
+          require(opened, "double-clicking the swinging edge must open its image");
+          motion.onAction = {};
+          clickedMovingEdge = true;
+        }
+      }
+      require(largestHeight - smallestHeight >= 4,
+              "copy feedback must visibly swing the card");
+      require(clickedMovingEdge, "motion check must exercise a displaced card edge");
+      motion.setRevealed(false, false);
+      require(motion.mask().boundingRect().width() == 32 &&
+                  motion.mask().boundingRect().height() == 4,
+              "after motion only the visible trigger may receive input");
+      std::cout << "Motion check passed: spring reveal, settling, copy swing, "
+                   "moving input regions, edge clicks, hidden trigger.\n";
+      return 0;
+    }
     if (app.arguments().contains("--arrival")) {
       Panel restored(app.primaryScreen());
       restored.setItems({});

@@ -16,7 +16,15 @@
 #include <QPointer>
 #include <QScreen>
 #include <QUrl>
+#include <algorithm>
 #include <cmath>
+
+static qreal recoil(qint64 age) {
+  if (age < 0 || age > 1800)
+    return 0;
+  qreal seconds = age / 1000.0;
+  return std::exp(-3.5 * seconds) * std::sin(12 * seconds);
+}
 
 Panel::Panel(QScreen *output) {
   assignedScreenName = output->name();
@@ -66,7 +74,7 @@ Panel::Panel(QScreen *output) {
   QObject::connect(&arrival, &QVariantAnimation::valueChanged, this,
                    [this] { update(); });
   QObject::connect(&arrival, &QVariantAnimation::finished, this,
-                   [this] { stopFlight(); });
+                   [this] { stopFlight(true); });
   hoverTimer.setSingleShot(true);
   hoverTimer.setInterval(100);
   QObject::connect(&hoverTimer, &QTimer::timeout, this,
@@ -80,9 +88,14 @@ Panel::Panel(QScreen *output) {
     }
   });
   breezeTimer.setInterval(40);
-  QObject::connect(&breezeTimer, &QTimer::timeout, this, [this] { update(); });
+  QObject::connect(&breezeTimer, &QTimer::timeout, this, [this] {
+    motionTime = clock.elapsed();
+    updateInput();
+    update();
+  });
   QObject::connect(&slide, &QVariantAnimation::valueChanged, this,
                    [this](const QVariant &value) {
+                     motionTime = clock.elapsed();
                      progress = value.toReal();
                      updateInput();
                      update();
@@ -170,11 +183,14 @@ void Panel::showCapture(const QString &path) {
   updateInput();
 }
 
-void Panel::stopFlight() {
+void Panel::stopFlight(bool landed) {
+  QString destination = flightPath;
   arrival.stop();
   flightPath.clear();
   flightImage = {};
   resize(width(), 210);
+  if (landed && !destination.isEmpty())
+    nudge(destination, 3.2);
   updateInput();
   update();
 }
@@ -182,13 +198,20 @@ void Panel::stopFlight() {
 void Panel::setRevealed(bool value, bool animate) {
   if (retiring)
     return;
+  bool opening = value && !revealed && animate;
   if (!value) {
+    flexStrength = 0;
+    for (auto &card : cards)
+      card.nudgeStrength = 0;
     captureTimer.stop();
     stopFlight();
   }
   hideTimer.stop();
   hoverTimer.stop();
   revealed = value;
+  if (opening)
+    for (const auto &card : cards)
+      nudge(card.path, 6);
   if (value)
     breezeTimer.start();
   else
@@ -197,9 +220,10 @@ void Panel::setRevealed(bool value, bool animate) {
   if (animate) {
     slide.setStartValue(progress);
     slide.setEndValue(value ? 1.0 : 0.0);
-    slide.setDuration(value ? 300 : 180);
-    slide.setEasingCurve(value ? QEasingCurve::OutCubic
-                               : QEasingCurve::InCubic);
+    slide.setDuration(value ? 420 : 180);
+    QEasingCurve easing(value ? QEasingCurve::OutBack : QEasingCurve::InCubic);
+    easing.setOvershoot(.9);
+    slide.setEasingCurve(easing);
     slide.start();
   } else {
     progress = value ? 1.0 : 0.0;
@@ -234,6 +258,41 @@ bool Panel::overSensor(QPointF point) const {
       QPoint(int(std::floor(point.x())), int(std::floor(point.y()))));
 }
 
+qreal Panel::sag() const {
+  return std::min(26.0, width() * .015) +
+         flexStrength * recoil(motionTime - flexAt);
+}
+
+void Panel::nudge(const QString &path, qreal strength) {
+  for (auto &card : cards)
+    if (card.path == path) {
+      qint64 now = clock.elapsed();
+      // Keep a rapid second click on the same swinging card.
+      if (card.nudgeStrength != 0 &&
+          motionTime - card.nudgedAt < QApplication::doubleClickInterval())
+        return;
+      card.nudgedAt = now;
+      card.nudgeStrength = strength;
+      flexAt = card.nudgedAt;
+      flexStrength = std::min(4.0, std::abs(strength) * .65);
+      break;
+    }
+}
+
+QTransform Panel::cardTransform(int index) const {
+  QRect box = cardRect(index);
+  QPointF peg(box.center().x(), box.top() - 10);
+  const auto &card = cards[index];
+  qreal tilt = (int(qHash(card.path) % 7) - 3) * .5;
+  qreal breeze = std::sin(motionTime / 1150.0 + index) * .8;
+  qreal swing = card.nudgeStrength * recoil(motionTime - card.nudgedAt);
+  QTransform transform;
+  transform.translate(peg.x(), peg.y());
+  transform.rotate(tilt + breeze + swing);
+  transform.translate(-peg.x(), -peg.y());
+  return transform;
+}
+
 QRect Panel::cardRect(int index) const {
   if (index < 0 || index >= cards.size())
     return {};
@@ -244,7 +303,7 @@ QRect Panel::cardRect(int index) const {
       int(std::min(156.0, spacing - 18)), 112, Qt::KeepAspectRatio);
   qreal fraction = x / std::max(1, width());
   int y =
-      int(18 + 4 * std::min(26.0, width() * .015) * fraction * (1 - fraction) +
+      int(18 + 4 * sag() * fraction * (1 - fraction) +
           12 - (1 - progress) * 215);
   return QRect(int(x) - size.width() / 2 - 5, y, size.width() + 10,
                size.height() + 10);
@@ -253,7 +312,8 @@ QRect Panel::cardRect(int index) const {
 int Panel::cardAt(QPoint point) const {
   for (int i = 0; i < cards.size(); ++i)
     if (cards[i].path != flightPath &&
-        cardRect(i).adjusted(-4, -12, 4, 4).contains(point))
+        cardRect(i).adjusted(-4, -12, 4, 4).contains(
+            cardTransform(i).inverted().map(QPointF(point)).toPoint()))
       return i;
   return -1;
 }
@@ -263,7 +323,8 @@ void Panel::updateInput() {
   if (progress > .01)
     for (int i = 0; i < cards.size(); ++i)
       if (cards[i].path != flightPath)
-        region |= cardRect(i).adjusted(-6, -14, 6, 6);
+        region |= QRegion(cardTransform(i).map(
+            QPolygon(cardRect(i).adjusted(-6, -14, 6, 6))));
   setMask(region.intersected(QRect(0, 0, width(), height())));
 }
 
@@ -277,13 +338,12 @@ QImage Panel::renderFrame() const {
   painter.fillRect(sensor(), QColor(119, 203, 171, 170));
   if (progress < .01)
     return frame;
-  painter.setOpacity(progress);
+  painter.setOpacity(std::clamp(progress, qreal(0), qreal(1)));
   painter.save();
   painter.translate(0, -(1 - progress) * 215);
   QPainterPath rope;
   rope.moveTo(0, 18);
-  rope.quadTo(width() / 2.0, 18 + 2 * std::min(26.0, width() * .015), width(),
-              18);
+  rope.quadTo(width() / 2.0, 18 + 2 * sag(), width(), 18);
   QLinearGradient gradient(0, 0, width(), 0);
   gradient.setColorAt(0, Qt::transparent);
   gradient.setColorAt(.1, QColor(175, 190, 180, 220));
@@ -308,11 +368,7 @@ QImage Panel::renderFrame() const {
     QRect box = cardRect(i);
     QPointF peg(box.center().x(), box.top() - 10);
     painter.save();
-    painter.translate(peg);
-    qreal tilt = (int(qHash(card.path) % 7) - 3) * .5;
-    qreal breeze = std::sin(clock.elapsed() / 1150.0 + i) * .8;
-    painter.rotate(tilt + breeze);
-    painter.translate(-peg);
+    painter.setTransform(cardTransform(i), true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(0, 0, 0, 60));
     painter.drawRoundedRect(box.adjusted(-3, 4, 3, 9), 11, 11);
@@ -340,15 +396,17 @@ QImage Panel::renderFrame() const {
                      box.topLeft() + QPoint(16, 16));
     painter.drawLine(box.topLeft() + QPoint(16, 9),
                      box.topLeft() + QPoint(9, 16));
+    painter.restore();
     if (copied == card.path && clock.elapsed() < copiedUntil) {
-      QRect badge(box.center().x() - 36, box.bottom() + 5, 72, 23);
+      QRectF movingBox = cardTransform(i).mapRect(box);
+      QRect badge(int(movingBox.center().x()) - 36,
+                  std::min(int(movingBox.bottom()) + 5, height() - 25), 72, 23);
       painter.setPen(Qt::NoPen);
       painter.setBrush(QColor("#28684e"));
       painter.drawRoundedRect(badge, 11, 11);
       painter.setPen(Qt::white);
       painter.drawText(badge, Qt::AlignCenter, "Copied ✓");
     }
-    painter.restore();
   }
   if (isFlying()) {
     int index = 0;
@@ -424,6 +482,8 @@ bool Panel::action(const QString &operation, const QString &path) {
     }
     copied = path;
     copiedUntil = clock.elapsed() + 1400;
+    nudge(path, 6);
+    updateInput();
     update();
   } else if (onAction)
     onAction(operation, path);
@@ -468,7 +528,7 @@ void Panel::mousePressEvent(QMouseEvent *event) {
     return;
   QRect box = cardRect(index);
   if (QRect(box.topLeft(), QSize(26, 26))
-          .contains(event->position().toPoint())) {
+          .contains(cardTransform(index).inverted().map(event->position()).toPoint())) {
     action("dismiss", path);
     return;
   }
