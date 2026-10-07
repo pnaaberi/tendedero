@@ -65,7 +65,7 @@ private:
   qreal flexStrength = 0;
   QRect sensor() const;
   bool overSensor(QPointF point) const;
-  int cardAt(QPoint point) const;
+  int cardAt(QPointF point) const;
   qreal sag() const;
   QTransform cardTransform(int index) const;
   void nudge(const QString &path, qreal strength);

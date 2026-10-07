@@ -21,6 +21,18 @@ static void require(bool condition, const char *message) {
     throw std::runtime_error(message);
 }
 
+class PaintedPanel : public Panel {
+public:
+  using Panel::Panel;
+  int frames = 0;
+
+protected:
+  void paintEvent(QPaintEvent *event) override {
+    ++frames;
+    Panel::paintEvent(event);
+  }
+};
+
 class TrackedPanel : public Panel {
 public:
   TrackedPanel(QScreen *screen, bool &active) : Panel(screen), active(active) {}
@@ -46,7 +58,7 @@ int main(int argc, char **argv) {
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
     if (app.arguments().contains("--motion")) {
-      Panel motion(app.primaryScreen());
+      PaintedPanel motion(app.primaryScreen());
       motion.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
       motion.show();
       motion.setRevealed(true, false);
@@ -64,7 +76,7 @@ int main(int argc, char **argv) {
               "spring reveal must visibly overshoot its resting position");
       require(std::abs(motion.cardRect(0).top() - restingY) <= 2,
               "spring reveal must settle back onto the line");
-      QTest::qWait(1000);
+      QTest::qWait(1200);
       require(motion.action("copy", path), "copy must start its feedback motion");
       QImage displayed = motion.renderFrame();
       QRegion displayedInput = motion.mask();
@@ -74,10 +86,13 @@ int main(int argc, char **argv) {
       QElapsedTimer wobble;
       wobble.start();
       int smallestHeight = 10000, largestHeight = 0;
+      int sampledFrames = 0;
       bool clickedMovingEdge = false;
-      while (wobble.elapsed() < QApplication::doubleClickInterval() + 500) {
+      while (wobble.elapsed() < QApplication::doubleClickInterval() + 500 ||
+             sampledFrames < 3) {
         QTest::qWait(20);
         QImage frame = motion.renderFrame();
+        ++sampledFrames;
         QRect blueBounds;
         QPoint movingEdge(-1, -1);
         int edgeDisplacement = 0;
@@ -136,13 +151,106 @@ int main(int argc, char **argv) {
           clickedMovingEdge = true;
         }
       }
+      if (largestHeight - smallestHeight < 4)
+        std::cerr << "Motion sampled " << sampledFrames << " frames over "
+                  << wobble.elapsed() << " ms; height delta "
+                  << largestHeight - smallestHeight << '\n';
       require(largestHeight - smallestHeight >= 4,
               "copy feedback must visibly swing the card");
       require(clickedMovingEdge, "motion check must exercise a displaced card edge");
+      QTest::qWait(2000);
+      motion.frames = 0;
+      QTest::qWait(320);
+      require(motion.frames <= 11,
+              "settled motion must return to the quieter frame rate");
+      require(motion.action("copy", path), "start a fresh swing for frame pacing");
+      QTest::qWait(20);
+      motion.frames = 0;
+      QTest::qWait(600);
+      require(motion.frames >= 24,
+              "active swings must draw frequently enough for smooth motion");
       motion.setRevealed(false, false);
       require(motion.mask().boundingRect().width() == 32 &&
                   motion.mask().boundingRect().height() == 4,
               "after motion only the visible trigger may receive input");
+      QTest::qWait(40);
+      motion.frames = 0;
+      QTest::qWait(120);
+      require(motion.frames == 0, "hidden cards must stop animation work");
+      Panel later(app.primaryScreen());
+      later.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+      later.show();
+      later.setRevealed(true, false);
+      require(later.action("copy", path), "start a later swing regression");
+      QTest::qWait(QApplication::doubleClickInterval() + 40);
+      QRegion swingingInput = later.mask();
+      require(later.action("copy", path), "copy again late in the swing");
+      require(later.mask() == swingingInput,
+              "copying late in an active swing must not snap the input pose");
+      later.setRevealed(false, false);
+      const QColor targetColor("#3266dc");
+      for (int crowdedWidth : {800, 1080})
+        for (int sample = 0; sample < 4; ++sample) {
+          QJsonArray crowdedItems;
+          QString crowdedTarget;
+          int targetIndex = crowdedWidth == 800 ? 4 : 0;
+          for (int i = 0; i < 8; ++i) {
+            QString crowdedPath = directory.filePath(
+                QString("crowded-%1-%2-%3.png").arg(crowdedWidth).arg(sample).arg(i));
+            QImage square(120, 120, QImage::Format_ARGB32);
+            square.fill(i == targetIndex ? targetColor : QColor("#cc0000"));
+            require(square.save(crowdedPath), "create crowded line fixture");
+            crowdedItems.append(QJsonObject{{"path", crowdedPath}, {"modified", "1"}});
+            if (i == targetIndex)
+              crowdedTarget = crowdedPath;
+          }
+          Panel crowded(app.primaryScreen());
+          crowded.resize(crowdedWidth, 210);
+          crowded.setItems(crowdedItems);
+          require(crowded.cardRect(targetIndex).isValid(),
+                  "crowded target thumbnail must load");
+          crowded.onError = [](QString message) {
+            std::cerr << message.toStdString() << '\n';
+          };
+          crowded.show();
+          crowded.setRevealed(true, false);
+          require(crowded.action("copy", crowdedTarget), "swing a card on a crowded line");
+          QTest::qWait(crowdedWidth == 800 ? 145 : 445);
+          QImage crowdedFrame = crowded.renderFrame();
+          QList<QPoint> edges;
+          int firstRow = int((crowded.cardRect(targetIndex).center().y() + 1) *
+                             crowdedFrame.devicePixelRatio());
+          for (int y = firstRow; y < crowdedFrame.height(); ++y) {
+            int first = -1, last = -1;
+            for (int x = 0; x < crowdedFrame.width(); ++x)
+              if (crowdedFrame.pixelColor(x, y) == targetColor) {
+                if (first < 0)
+                  first = x;
+                last = x;
+              }
+            if (first >= 0)
+              edges.append({QPoint(first, y), QPoint(last, y)});
+          }
+          require(!edges.isEmpty(), "crowded line must show the target screenshot");
+          for (QPoint edge : edges) {
+            QPointF point((edge.x() + .5) / crowdedFrame.devicePixelRatio(),
+                          (edge.y() + .5) / crowdedFrame.devicePixelRatio());
+            QMouseEvent press(QEvent::MouseButtonPress, point, point,
+                              crowded.mapToGlobal(point.toPoint()), Qt::LeftButton,
+                              Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent release(QEvent::MouseButtonRelease, point, point,
+                                crowded.mapToGlobal(point.toPoint()), Qt::LeftButton,
+                                Qt::NoButton, Qt::NoModifier);
+            app.clipboard()->clear();
+            QCoreApplication::sendEvent(&crowded, &press);
+            QCoreApplication::sendEvent(&crowded, &release);
+            QImage copied = app.clipboard()->image();
+            require(!copied.isNull(), "visible card body edge must copy an image");
+            require(copied.pixelColor(copied.width() / 2,
+                                      copied.height() / 2) == targetColor,
+                    "clicking a visible overlapping image must copy that image");
+          }
+        }
       std::cout << "Motion check passed: spring reveal, settling, copy swing, "
                    "moving input regions, edge clicks, hidden trigger.\n";
       return 0;

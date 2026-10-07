@@ -19,11 +19,13 @@
 #include <algorithm>
 #include <cmath>
 
+static constexpr qint64 pulseDurationMs = 1800;
+
 static qreal recoil(qint64 age) {
-  if (age < 0 || age > 1800)
+  if (age < 0 || age > pulseDurationMs)
     return 0;
   qreal seconds = age / 1000.0;
-  return std::exp(-3.5 * seconds) * std::sin(12 * seconds);
+  return std::exp(-3.0 * seconds) * std::sin(10 * seconds);
 }
 
 Panel::Panel(QScreen *output) {
@@ -88,8 +90,11 @@ Panel::Panel(QScreen *output) {
     }
   });
   breezeTimer.setInterval(40);
+  breezeTimer.setTimerType(Qt::PreciseTimer);
   QObject::connect(&breezeTimer, &QTimer::timeout, this, [this] {
     motionTime = clock.elapsed();
+    if (motionTime - flexAt >= pulseDurationMs && breezeTimer.interval() != 40)
+      breezeTimer.setInterval(40);
     updateInput();
     update();
   });
@@ -190,7 +195,7 @@ void Panel::stopFlight(bool landed) {
   flightImage = {};
   resize(width(), 210);
   if (landed && !destination.isEmpty())
-    nudge(destination, 3.2);
+    nudge(destination, 5);
   updateInput();
   update();
 }
@@ -211,7 +216,7 @@ void Panel::setRevealed(bool value, bool animate) {
   revealed = value;
   if (opening)
     for (const auto &card : cards)
-      nudge(card.path, 6);
+      nudge(card.path, 9);
   if (value)
     breezeTimer.start();
   else
@@ -220,9 +225,9 @@ void Panel::setRevealed(bool value, bool animate) {
   if (animate) {
     slide.setStartValue(progress);
     slide.setEndValue(value ? 1.0 : 0.0);
-    slide.setDuration(value ? 420 : 180);
+    slide.setDuration(value ? 480 : 180);
     QEasingCurve easing(value ? QEasingCurve::OutBack : QEasingCurve::InCubic);
-    easing.setOvershoot(.9);
+    easing.setOvershoot(1.1);
     slide.setEasingCurve(easing);
     slide.start();
   } else {
@@ -267,14 +272,15 @@ void Panel::nudge(const QString &path, qreal strength) {
   for (auto &card : cards)
     if (card.path == path) {
       qint64 now = clock.elapsed();
-      // Keep a rapid second click on the same swinging card.
+      // Let the displayed swing settle before starting another pulse.
       if (card.nudgeStrength != 0 &&
-          motionTime - card.nudgedAt < QApplication::doubleClickInterval())
+          motionTime - card.nudgedAt < pulseDurationMs)
         return;
       card.nudgedAt = now;
       card.nudgeStrength = strength;
       flexAt = card.nudgedAt;
-      flexStrength = std::min(4.0, std::abs(strength) * .65);
+      flexStrength = std::min(6.0, std::abs(strength) * .75);
+      breezeTimer.setInterval(16);
       break;
     }
 }
@@ -284,7 +290,7 @@ QTransform Panel::cardTransform(int index) const {
   QPointF peg(box.center().x(), box.top() - 10);
   const auto &card = cards[index];
   qreal tilt = (int(qHash(card.path) % 7) - 3) * .5;
-  qreal breeze = std::sin(motionTime / 1150.0 + index) * .8;
+  qreal breeze = std::sin(motionTime / 1150.0 + index) * 1.1;
   qreal swing = card.nudgeStrength * recoil(motionTime - card.nudgedAt);
   QTransform transform;
   transform.translate(peg.x(), peg.y());
@@ -309,12 +315,27 @@ QRect Panel::cardRect(int index) const {
                size.height() + 10);
 }
 
-int Panel::cardAt(QPoint point) const {
-  for (int i = 0; i < cards.size(); ++i)
-    if (cards[i].path != flightPath &&
-        cardRect(i).adjusted(-4, -12, 4, 4).contains(
-            cardTransform(i).inverted().map(QPointF(point)).toPoint()))
-      return i;
+int Panel::cardAt(QPointF point) const {
+  // Visible cards take priority over a neighbor's transparent click padding.
+  for (bool padded : {false, true})
+    for (int i = int(cards.size()) - 1; i >= 0; --i) {
+      if (cards[i].path == flightPath)
+        continue;
+      QRect box = cardRect(i);
+      QPointF local = cardTransform(i).inverted().map(point);
+      if (padded) {
+        if (box.adjusted(-4, -12, 4, 4).contains(local.toPoint()))
+          return i;
+      } else {
+        QPainterPath visible;
+        visible.setFillRule(Qt::WindingFill);
+        visible.addRoundedRect(box, 9, 9);
+        QPointF peg(box.center().x(), box.top() - 10);
+        visible.addRoundedRect(QRectF(peg.x() - 5, peg.y() - 4, 10, 22), 2, 2);
+        if (visible.contains(local))
+          return i;
+      }
+    }
   return -1;
 }
 
@@ -482,7 +503,7 @@ bool Panel::action(const QString &operation, const QString &path) {
     }
     copied = path;
     copiedUntil = clock.elapsed() + 1400;
-    nudge(path, 6);
+    nudge(path, 9);
     updateInput();
     update();
   } else if (onAction)
@@ -492,7 +513,7 @@ bool Panel::action(const QString &operation, const QString &path) {
 
 void Panel::mousePressEvent(QMouseEvent *event) {
   hideTimer.stop();
-  int index = cardAt(event->position().toPoint());
+  int index = cardAt(event->position());
   if (index < 0) {
     if (overSensor(event->position()))
       setRevealed(true);
@@ -551,7 +572,7 @@ void Panel::mouseReleaseEvent(QMouseEvent *event) {
 void Panel::mouseDoubleClickEvent(QMouseEvent *event) {
   holdTimer.stop();
   pressed.clear();
-  int index = cardAt(event->position().toPoint());
+  int index = cardAt(event->position());
   if (index >= 0 && event->button() == Qt::LeftButton)
     action("open", cards[index].path);
 }
