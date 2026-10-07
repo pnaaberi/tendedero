@@ -1,71 +1,104 @@
-# Pegline Linux verification — 2026-10-07
+# Pegline Linux verification
 
-Built and installed on the verified KDE desktop: CachyOS, KDE Plasma Wayland, Qt 6.11.2,
-Rust 1.97.1, one 1920×1080 screen. The local executable is
-`~/.local/bin/pegline`; `pegline.service` is enabled and running.
+Last verified: **2026-10-07**. Application source:
+[`56aec8d`](https://github.com/pnaaberi/tendedero/commit/56aec8d32e549ea70e13ed4b0cc6a4ff9735474f).
+This record covers the Rust/Qt port and the shipped region-capture, screenshot
+flight, and ten-second reveal update. It records completed checks, not a
+promise of support for every desktop configuration.
 
-## Evidence
+[User guide](../../README.md) · [Troubleshooting](../troubleshooting.md) ·
+[Build and checks](../development.md)
 
-- 11 Rust tests and one native Qt integration test passed. The tests use
-  real filesystem operations, image data, card events, and nested menu events.
-- Formatting, Clippy with warnings denied, the locked release build, shell
-  syntax, desktop-file validation, and installed user-service validation passed.
-- The real Wayland clipboard failure check passed: an unavailable connection
-  returns failure and supplies an error, without displaying success.
-- The installed live KDE check passed: screenshot ingestion, complete PNG
-  transfer larger than 64 KiB, file URL transfer, save-copy byte preservation,
-  file-retaining dismissal, restart persistence, active global shortcut and
-  shortcut delivery, and reveal. All generated watched/Pictures fixtures were
-  removed. Desktop screenshots stayed in private temporary directories.
-- The installed executable matched the release executable's SHA-256:
-  `37c4810962eb9679b446b28fc5f4ca98ac762e14e451351f706d321b4d8346c5`.
+## Automated evidence
 
-## Review and corrections
+- **12 Rust unit tests** and **one native Qt integration test** passed. The
+  integration test runs both the normal UI smoke mode and the arrival mode.
+- The filesystem suite covers stable writes and decode retries, filtering,
+  eight-card capacity, dismissal persistence, removed files, scan recovery,
+  corrupt-state preservation, settings parsing, copy collisions, and the
+  distinction between historical images and captures made after startup.
+- Native checks cover rendered cards, input regions, image clipboard data,
+  cancelled drag ownership, file-retaining dismissal, and safe retirement
+  during nested menu handlers.
+- Arrival checks inspect rendered frames to establish upward travel, preview
+  click-through, landing, restored card input, the full ten-second timer,
+  pointer-leave behavior, repeated-capture reset, manual hide, and retained
+  source files. Historical imports do not start the flight.
+- Cargo formatting, Clippy with warnings denied, and the locked release build
+  passed. Desktop-entry, shell-syntax, and installed user-service validation
+  also passed during port installation.
+- An isolated full-executable check verified that cold-start and offline
+  images restore quietly while a new live image reveals the line.
 
-A fresh reviewer examined the whole port from upstream commit `3c866d9`
-through `db0a833`. One fix pass addressed four findings:
+## Live KDE evidence
 
-- Panel retirement now closes menus and cancels drags, then releases the
-  panel after nested handlers return. A tracked handler regression failed
-  before the fix and passed afterward; restoring unconditional deletion
-  also made the regression fail.
-- Native Wayland clipboard failure no longer reports success. The live
-  failure regression was observed failing before the fix and passing after it.
-- Transient scan errors clear on recovery, permitting repeat notifications
-  after a later failure. Corrupt-state recovery notices remain separate.
-- Repeated failures decoding a stable image report its path, while preserving
-  retries and avoiding notifications for brief incomplete writes.
+Verified on CachyOS with KDE Plasma Wayland, Rust 1.97.1, Qt 6.11.2,
+LayerShellQt 6.7.5, and Spectacle 6.7.5. Capture arrival was checked on two
+connected displays with mixed scaling.
 
-The last two findings were treated as material because misleading or missing
-failure feedback violates the intended user behavior. Both filesystem
-regressions failed first and passed after correction. No review findings
-remain deferred.
+- Actual Meta+Shift+S input launched region selection. Selecting and releasing
+  produced a real PNG of a synthetic test window.
+- The preview travelled into the line on both displays, landed, and released
+  the expanded animation surface. The line remained revealed for the full
+  preview and hid automatically afterward. Escape cancellation also passed.
+- KDE assigned Meta+Shift+S to Pegline's `CaptureRegion` action while retaining
+  Print Screen for Spectacle. Shortcut assignments survived service restart.
+- Background clipboard transfer provided a complete full-resolution PNG
+  larger than 64 KiB and a file URL. Safe copies preserved bytes, dismissal
+  kept the source, and history survived restarting the service.
+- The Wayland clipboard failure check reported failure without claiming
+  success when a connection was unavailable.
+- `pegline.service` was active and enabled for the graphical session. The
+  installed and running executable matched the verified release build.
+- Only generated fixtures were removed. User screenshots and history were
+  retained. Temporary virtual input devices and test windows were removed.
+  Desktop evidence and raw audit reports stayed outside the repository.
 
-## Decisions and supported limits
+The checked-in live script exercises ingestion, clipboard, file actions,
+persistence, and D-Bus delivery of the toggle action. The region shortcut and
+flight checks above were separate live checks; do not treat a script pass as
+proof of physical shortcut delivery. See the
+[desktop checklist](../development.md#desktop-checks).
 
-1. `Store::scan` accepts a decoder callback, reusing installed Qt codecs rather
-   than adding another image library. If unsuitable, one method signature and
-   its caller would need changing.
-2. A small native `ext-data-control-v1` adapter provides background clipboard
-   access: this KWin session advertises the newer protocol, while installed
-   Qt does not use it. The cost is the adapter and Wayland development files.
-3. Spectacle replaces macOS capture/annotation APIs; fullscreen stacking
-   follows KDE's top-layer policy. Capture-flight effects and macOS fullscreen
-   parity are outside the approved scope. Changing this requires a separate
-   animation or stacking feature.
-4. KDE Wayland is the verified target. Other compositors and multiple seats
-   are unverified, and live multi-screen testing needs additional hardware.
-   Expanding support requires compositor/hardware checks and possibly protocol
-   adjustments.
+## Review corrections
 
-The port uses the independent name **Pegline** and its own icon to respect
-the upstream project's restricted name/artwork. Original source history and
-MIT attribution remain in the fork.
+Whole-port review produced fixes for panel lifetime during nested Qt handlers,
+false clipboard success, scan-error recovery, and stable-image decode failure
+feedback. A separate review of the capture update found that delayed startup
+imports could masquerade as new captures. The watcher now carries a startup
+fingerprint baseline through the JSON snapshot; the UI animates only live
+arrivals. Regression checks failed before the corresponding fixes and passed
+afterward. The capture review's Markdown table issue was also corrected.
 
-## Publication
+## Supported limits
 
-The fork is https://github.com/pnaaberi/tendedero, with `linux-pegline` as
-its default branch and `alejandrobujan/tendedero` retained as its parent.
-The published branch retains upstream commit history and contains the port,
-installation scripts, usage guide, and this verification record. Remote
-branch hashes were checked against the local commits after pushing.
+- KDE Wayland is the verified target. Other compositors, X11, multiple seats,
+  and a broader range of hardware have not received equivalent live testing.
+- Fullscreen stacking follows KDE's top-layer policy; macOS fullscreen parity
+  has not been established.
+- The flight begins at screen center because saved Spectacle images do not
+  reliably carry the selected rectangle's coordinates.
+- Capture and annotation use Spectacle. A custom `--watch` folder does not
+  redirect Spectacle's save location.
+- Background Wayland clipboard access requires `ext-data-control-v1`.
+  Native system libraries are dynamically linked and are not bundled here.
+
+## Publication and privacy
+
+The public fork is [pnaaberi/tendedero](https://github.com/pnaaberi/tendedero),
+with `linux-pegline` as its default branch and the original source history and
+MIT attribution retained. Pegline uses an independent name and icon.
+
+The cleaned application history was audited before publication: ten reachable
+commits, zero Gitleaks secret findings, and no private desktop captures, logs,
+local home paths, or device identifiers in the outgoing history. All eleven
+locked registry dependency versions were queried with OSV; no matching known
+advisories were found at that time. The query did not cover native system
+library advisories. Dependency and secret results are date-specific, so repeat
+these checks for later publications.
+
+Earlier documentation references to the local machine were removed across the
+published branch history. GitHub can retain old commit objects, and existing
+clones or caches can retain prior content; a history rewrite does not erase
+those copies. Raw audit reports remain local. New public changes must follow
+the [publication checks](../development.md#changes-and-publication).

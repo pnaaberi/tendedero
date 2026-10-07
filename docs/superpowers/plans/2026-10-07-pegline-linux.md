@@ -1,6 +1,9 @@
 # Pegline Linux Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans to implement this plan inline, task by task. Steps use checkbox syntax for tracking.
+Completed implementation record, including the subsequent capture-and-reveal
+update. For current setup and commands, use the [README](../../../README.md)
+and [development guide](../../development.md). See the
+[verification record](../pegline-linux-verification.md) for completed checks.
 
 **Goal:** Build, install, and run a native Linux screenshot line on the test machine and publish the port to the user's GitHub fork.
 
@@ -32,7 +35,7 @@
 
 **Files:** `linux/Cargo.toml`, `linux/src/store.rs`, Rust unit tests in `store.rs`.
 
-**Interfaces:** `Store::open(watch: PathBuf, state: PathBuf) -> io::Result<Store>`, `Store::scan() -> io::Result<bool>`, `Store::dismiss(path: &Path) -> io::Result<()>`, `Store::save_copy(path: &Path, destination: &Path) -> io::Result<PathBuf>`, and a serializable snapshot with `watch`, `items`, and `error` fields. Each item has `path` and `modified` fields. Keep settings discovery in this module.
+**Interfaces:** `Store::open(watch: PathBuf, state: PathBuf) -> io::Result<Store>`, `Store::scan(valid: impl Fn(&Path) -> bool) -> io::Result<bool>`, `Store::dismiss(path: &Path) -> io::Result<()>`, `Store::save_copy(path: &Path, destination: &Path) -> io::Result<PathBuf>`, and a JSON snapshot with `watch`, `items`, `error`, and `warning` fields. Each item has `path`, `modified`, and `new` fields. Keep settings discovery in this module.
 
 - [x] Write failing tests using real temporary files: incomplete/stable discovery, filtering video/hidden/symlink files, eight-item eviction, dismissal persistence, pruning, Spectacle file-URL decoding with spaces, corrupt-state preservation, and destination collisions.
 - [x] Run the tests and observe their failures before implementing the behavior.
@@ -67,3 +70,25 @@
 - [x] Perform one whole-branch code review using superpowers:requesting-code-review, fixing material findings and rerunning relevant checks.
 - [x] Create or reuse `pnaaberi/tendedero`, publish the port on `linux-pegline`, and verify remote commit and fork metadata. Keep the upstream source history.
 - [x] Record the final verification evidence and give the user the fork link, installed command, and practical usage instructions.
+
+## Task 4: Region shortcut and timed capture arrival
+
+Completed follow-up to the initial port; covered by the updated spec.
+
+- [x] Add Pegline's `CaptureRegion` KDE action with Meta+Shift+S as its default
+  and expose `--capture-region` through single-instance controls.
+- [x] Use an owned Spectacle process for region capture, prevent overlapping
+  requests, and handle launch failure, completion, and cancellation.
+- [x] Animate the preview from screen center into its card, pass preview input
+  through, and release the expanded surface after landing.
+- [x] Automatically reveal for ten seconds, reset on another capture, ignore
+  pointer leave during the preview, and allow early hiding.
+- [x] Preserve card interactions during expiry and restore historical or
+  offline images quietly using the watcher's startup fingerprint baseline.
+- [x] Verify real frame movement, input regions, duration, reset, early hide,
+  restoration, and retention with native tests and an isolated executable check.
+- [x] Validate actual Meta+Shift+S region selection and Escape cancellation on
+  KDE Wayland, retain Spectacle's Print Screen binding, and check arrival on
+  two displays with mixed scaling.
+- [x] Review the follow-up, fix startup restoration and table rendering, audit
+  the complete cleaned history, and publish the tested capture update.
