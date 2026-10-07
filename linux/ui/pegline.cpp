@@ -71,8 +71,12 @@ public:
   QString lastError;
   QString lastWarning;
   QAction shortcut;
+  QAction captureShortcut;
+  bool capturing = false;
 
-  Desktop() : shortcut("Show or hide Pegline", this) {
+  Desktop()
+      : shortcut("Show or hide Pegline", this),
+        captureShortcut("Capture a region to Pegline", this) {
     tray.setIcon(ownIcon());
     tray.setToolTip("Pegline — screenshots within reach");
     tray.setContextMenu(&menu);
@@ -83,7 +87,7 @@ public:
     };
     add("Show / hide line    Meta+Alt+T", [this] { control("Toggle"); });
     menu.addSeparator();
-    add("Capture a region…", [this] { capture("--region"); });
+    add("Capture a region…    Meta+Shift+S", [this] { capture("--region"); });
     add("Capture current screen", [this] { capture("--current"); });
     add("Open screenshot folder", [this] {
       QDesktopServices::openUrl(QUrl::fromLocalFile(state["watch"].toString()));
@@ -110,6 +114,16 @@ public:
              "shortcut settings.");
     QObject::connect(&shortcut, &QAction::triggered, this,
                      [this] { control("Toggle"); });
+    captureShortcut.setObjectName("CaptureRegion");
+    captureShortcut.setProperty("componentName", "org.choppy.Pegline");
+    captureShortcut.setProperty("componentDisplayName", "Pegline");
+    captureShortcut.setAutoRepeat(false);
+    if (!KGlobalAccel::setGlobalShortcut(&captureShortcut,
+                                         QKeySequence("Meta+Shift+S")))
+      report("Could not register Meta+Shift+S. Set Pegline's capture shortcut "
+             "in KDE settings.");
+    QObject::connect(&captureShortcut, &QAction::triggered, this,
+                     [this] { capture("--region"); });
     refresh();
     for (QScreen *screen : QApplication::screens())
       addScreen(screen);
@@ -160,11 +174,32 @@ public:
   }
 
   void capture(const QString &mode) {
+    if (capturing)
+      return;
+    capturing = true;
     control("Hide");
     QTimer::singleShot(250, this, [this, mode] {
-      if (!QProcess::startDetached("spectacle",
-                                   {"--background", "--nonotify", mode}))
-        report("Could not launch Spectacle");
+      auto process = new QProcess(this);
+      QObject::connect(process, &QProcess::errorOccurred, this,
+                       [this, process](QProcess::ProcessError error) {
+                         if (error == QProcess::FailedToStart) {
+                           capturing = false;
+                           report("Could not launch Spectacle: " +
+                                  process->errorString());
+                           process->deleteLater();
+                         }
+                       });
+      QObject::connect(
+          process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+          this, [this, process](int code, QProcess::ExitStatus status) {
+            capturing = false;
+            if (status == QProcess::CrashExit || code != 0)
+              report("Spectacle could not complete the capture");
+            process->deleteLater();
+          });
+      process->start("spectacle",
+                     {"--background", "--nonotify", "--new-instance", "--delay",
+                      "0", "--release-capture", mode});
     });
   }
 
@@ -218,12 +253,18 @@ public:
           surfaces.append(QJsonObject{{"screen", panel->screenName()},
                                       {"width", panel->width()},
                                       {"height", panel->height()},
-                                      {"revealed", panel->isRevealed()}});
+                                      {"revealed", panel->isRevealed()},
+                                      {"flying", panel->isFlying()}});
         }
       result["visible"] = visible;
       result["surfaces"] = surfaces;
       result["platform"] = QApplication::platformName();
+      result["capturing"] = capturing;
       return json(result);
+    }
+    if (method == "CaptureRegion") {
+      capture("--region");
+      return "ok";
     }
     if (method == "Action" && args.size() == 2)
       return perform(args[0], args[1]);
@@ -262,6 +303,8 @@ public:
            "<method name=\"Hide\"><arg type=\"s\" direction=\"out\"/></method>"
            "<method name=\"Toggle\"><arg type=\"s\" "
            "direction=\"out\"/></method>"
+           "<method name=\"CaptureRegion\"><arg type=\"s\" "
+           "direction=\"out\"/></method>"
            "<method name=\"Quit\"><arg type=\"s\" direction=\"out\"/></method>"
            "<method name=\"Status\"><arg type=\"s\" "
            "direction=\"out\"/></method>"
@@ -298,6 +341,8 @@ extern "C" int pg_run(int argc, char **argv) {
       command = "Hide";
     if (argument == "--toggle")
       command = "Toggle";
+    if (argument == "--capture-region")
+      command = "CaptureRegion";
     if (argument == "--quit")
       command = "Quit";
     if (argument == "--status")
@@ -336,7 +381,9 @@ extern "C" int pg_run(int argc, char **argv) {
     qCritical() << "Could not register Pegline controls";
     return 1;
   }
-  if (command == "Show" || command == "Toggle")
+  if (command == "CaptureRegion")
+    desktop.control("CaptureRegion");
+  else if (command == "Show" || command == "Toggle")
     desktop.control("Show");
   return app.exec();
 }

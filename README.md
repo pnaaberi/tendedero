@@ -4,11 +4,16 @@ Screenshots, hanging within reach. A native **KDE Wayland** port of
 [Alejandro Buján's Tendedero](https://github.com/alejandrobujan/tendedero), with a
 Rust core and a small Qt6 interface.
 
-Move the pointer to the **top center of your screen** or press **Meta+Alt+T**.
-Recent screenshots hang from a line; move away and it tucks back out of sight.
+Press **Meta+Shift+S**, drag to select a region, and release to capture.
+A preview flies from screen center into Pegline, which opens automatically for
+**10 seconds**. Another capture resets the timer; Meta+Alt+T hides it early.
+
+You can also move the pointer to the **top center of your screen** or press
+**Meta+Alt+T** to reveal your recent screenshots.
 The app lives in your system tray and starts with your graphical session.
 
 | Gesture | Action |
+| Meta+Shift+S | Capture a region directly to Pegline |
 | --- | --- |
 | Click a screenshot | Copy the full image and file URL |
 | Double-click | Open in your usual image viewer |
@@ -24,7 +29,7 @@ restarts. It ignores video recordings. Dismissing cards, exceeding the limit,
 and quitting **never delete your screenshots**. Saving to Pictures creates a
 unique filename and never overwrites an existing file.
 
-Use your existing Print Screen shortcuts. The tray also offers region and
+Your existing Print Screen shortcuts remain available. The tray also offers region and
 current-screen captures. Pegline does not change your Spectacle preferences.
 No account, network access, or telemetry is used at runtime.
 
@@ -52,6 +57,7 @@ Use `--no-start` to install without enabling or starting the service.
 ## Commands
 
 ```sh
+pegline --capture-region
 pegline --show
 pegline --hide
 pegline --toggle
@@ -67,7 +73,9 @@ pegline --watch "$HOME/Pictures/Screenshots"
 ```
 
 Use a systemd service override to make an alternate folder permanent. Set the
-KDE shortcut in System Settings → Keyboard → Shortcuts → Pegline. Pegline
+KDE shortcuts in System Settings → Keyboard → Shortcuts → Pegline.
+If Meta+Shift+S is assigned to Spectacle, remove that key from Spectacle
+and assign it to Pegline's “Capture a region to Pegline” action. Pegline
 leaves an already assigned shortcut alone; its tray icon always remains usable.
 
 History is kept at `${XDG_STATE_HOME:-~/.local/state}/pegline/state.json`.
@@ -125,7 +133,9 @@ is a basic Qt/X11 fallback, but KDE Wayland is the tested target. Multi-screen
 surfaces are implemented; the live check uses a single screen.
 
 Fullscreen stacking follows the compositor's top-layer policy. Apple Markup
-is replaced by Spectacle, and macOS capture-flight effects are not ported.
+is replaced by Spectacle. Capture previews fly from screen center; Spectacle
+files do not reliably contain the original selection rectangle. The flight
+uses a temporary transparent surface, and only cards receive input.
 Screenshot-directory takeover and automatic trashing are deliberately omitted.
 
 The original macOS sources and scripts remain in `Sources/Tendedero` and

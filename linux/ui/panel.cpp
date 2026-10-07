@@ -46,9 +46,26 @@ Panel::Panel(QScreen *output) {
   hideTimer.setSingleShot(true);
   hideTimer.setInterval(650);
   QObject::connect(&hideTimer, &QTimer::timeout, this, [this] {
-    if (!dragging)
+    if (!dragging && !captureTimer.isActive())
       setRevealed(false);
   });
+  captureTimer.setSingleShot(true);
+  captureTimer.setTimerType(Qt::PreciseTimer);
+  captureTimer.setInterval(10000);
+  QObject::connect(&captureTimer, &QTimer::timeout, this, [this] {
+    if (dragging || currentMenu || !pressed.isEmpty())
+      captureTimer.start(1000);
+    else
+      setRevealed(false);
+  });
+  arrival.setStartValue(0.0);
+  arrival.setEndValue(1.0);
+  arrival.setDuration(800);
+  arrival.setEasingCurve(QEasingCurve::InOutCubic);
+  QObject::connect(&arrival, &QVariantAnimation::valueChanged, this,
+                   [this] { update(); });
+  QObject::connect(&arrival, &QVariantAnimation::finished, this,
+                   [this] { stopFlight(); });
   hoverTimer.setSingleShot(true);
   hoverTimer.setInterval(100);
   QObject::connect(&hoverTimer, &QTimer::timeout, this,
@@ -70,15 +87,21 @@ Panel::Panel(QScreen *output) {
                      update();
                    });
   QObject::connect(
-      output, &QScreen::geometryChanged, this,
-      [this](const QRect &geometry) { resize(geometry.width(), 210); });
+      output, &QScreen::geometryChanged, this, [this](const QRect &geometry) {
+        resize(geometry.width(), isFlying() ? geometry.height() : 210);
+      });
   updateInput();
 }
 
 void Panel::setItems(const QJsonArray &items) {
-  if (retiring || items == lastItems || dragging)
+  if (retiring || dragging)
+    return;
+  bool restored = !initialized;
+  initialized = true;
+  if (items == lastItems)
     return;
   QList<Card> next;
+  QString newCapture;
   for (const auto &value : items) {
     auto item = value.toObject();
     QString path = item["path"].toString(), stamp = item["modified"].toString();
@@ -96,11 +119,55 @@ void Panel::setItems(const QJsonArray &items) {
       reader.setScaledSize(size.scaled(156, 112, Qt::KeepAspectRatio));
     reader.setAutoTransform(true);
     QImage image = reader.read();
-    if (!image.isNull())
+    if (!image.isNull()) {
       next.append({path, stamp, image});
+      if (!restored)
+        newCapture = path;
+    }
   }
   cards = next;
   lastItems = items;
+  updateInput();
+  update();
+  if (!newCapture.isEmpty())
+    showCapture(newCapture);
+  else if (!flightPath.isEmpty() &&
+           !std::any_of(cards.begin(), cards.end(), [this](const Card &card) {
+             return card.path == flightPath;
+           }))
+    stopFlight();
+  if (cards.isEmpty() && captureTimer.isActive())
+    setRevealed(false);
+}
+
+void Panel::showCapture(const QString &path) {
+  stopFlight();
+  setRevealed(true, false);
+  captureTimer.start(10000);
+  QImageReader reader(path);
+  reader.setAutoTransform(true);
+  QSize size = reader.size();
+  if (size.isValid())
+    reader.setScaledSize(size.scaled(600, 420, Qt::KeepAspectRatio));
+  flightImage = reader.read();
+  if (flightImage.isNull())
+    return;
+  flightPath = path;
+  resize(width(), screen()->geometry().height());
+  QSizeF preview = flightImage.size().scaled(
+      int(width() * .65), int(height() * .55), Qt::KeepAspectRatio);
+  flightStart = QRectF(QPointF(width() / 2.0 - preview.width() / 2,
+                               height() / 2.0 - preview.height() / 2),
+                       preview);
+  arrival.start();
+  updateInput();
+}
+
+void Panel::stopFlight() {
+  arrival.stop();
+  flightPath.clear();
+  flightImage = {};
+  resize(width(), 210);
   updateInput();
   update();
 }
@@ -108,6 +175,10 @@ void Panel::setItems(const QJsonArray &items) {
 void Panel::setRevealed(bool value, bool animate) {
   if (retiring)
     return;
+  if (!value) {
+    captureTimer.stop();
+    stopFlight();
+  }
   hideTimer.stop();
   hoverTimer.stop();
   revealed = value;
@@ -140,6 +211,8 @@ void Panel::retire() {
   hoverTimer.stop();
   holdTimer.stop();
   breezeTimer.stop();
+  captureTimer.stop();
+  arrival.stop();
   slide.stop();
   if (currentMenu)
     currentMenu->close();
@@ -168,7 +241,8 @@ QRect Panel::cardRect(int index) const {
 
 int Panel::cardAt(QPoint point) const {
   for (int i = 0; i < cards.size(); ++i)
-    if (cardRect(i).adjusted(-4, -12, 4, 4).contains(point))
+    if (cards[i].path != flightPath &&
+        cardRect(i).adjusted(-4, -12, 4, 4).contains(point))
       return i;
   return -1;
 }
@@ -177,7 +251,8 @@ void Panel::updateInput() {
   QRegion region(sensor());
   if (progress > .01)
     for (int i = 0; i < cards.size(); ++i)
-      region |= cardRect(i).adjusted(-6, -14, 6, 6);
+      if (cards[i].path != flightPath)
+        region |= cardRect(i).adjusted(-6, -14, 6, 6);
   setMask(region.intersected(QRect(0, 0, width(), height())));
 }
 
@@ -219,6 +294,8 @@ QImage Panel::renderFrame() const {
   }
   for (int i = 0; i < cards.size(); ++i) {
     const auto &card = cards[i];
+    if (card.path == flightPath)
+      continue;
     QRect box = cardRect(i);
     QPointF peg(box.center().x(), box.top() - 10);
     painter.save();
@@ -263,6 +340,26 @@ QImage Panel::renderFrame() const {
       painter.drawText(badge, Qt::AlignCenter, "Copied ✓");
     }
     painter.restore();
+  }
+  if (isFlying()) {
+    int index = 0;
+    while (index < cards.size() && cards[index].path != flightPath)
+      ++index;
+    QRectF target = cardRect(index).adjusted(5, 5, -5, -5);
+    qreal t = arrival.currentValue().toReal();
+    QPointF center = flightStart.center() * (1 - t) + target.center() * t;
+    center.rx() += std::sin(t * M_PI) * 65;
+    QSizeF size = flightStart.size() * (1 - t) + target.size() * t;
+    QRectF box(center - QPointF(size.width() / 2, size.height() / 2), size);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 0, 0, 70));
+    painter.drawRoundedRect(box.adjusted(-7, -2, 7, 13), 12, 12);
+    painter.setBrush(QColor(233, 241, 235, 245));
+    painter.drawRoundedRect(box.adjusted(-5, -5, 5, 5), 9, 9);
+    QPainterPath clip;
+    clip.addRoundedRect(box, 5, 5);
+    painter.setClipPath(clip);
+    painter.drawImage(box, flightImage);
   }
   return frame;
 }

@@ -119,7 +119,7 @@ fn main() {
         match arguments[i].as_str() {
             "--help" | "-h" => {
                 println!(
-                    "Pegline — screenshots, hanging within reach\n\nUsage: pegline [--watch DIRECTORY] [--daemon|--show|--hide|--toggle|--status|--quit]\n\nHover at the top center or press Meta+Alt+T to reveal.\nClick: copy • Double-click: open • Hold: annotate • Drag: share\nScreenshot files are kept when cards are dismissed."
+                    "Pegline — screenshots, hanging within reach\n\nUsage: pegline [--watch DIRECTORY] [--daemon|--capture-region|--show|--hide|--toggle|--status|--quit]\n\nMeta+Shift+S: capture a region; new captures fly into the line for ten seconds.\nHover at the top center or press Meta+Alt+T to reveal.\nClick: copy • Double-click: open • Hold: annotate • Drag: share\nScreenshot files are kept when cards are dismissed."
                 );
                 return;
             }
@@ -131,7 +131,8 @@ fn main() {
                 i += 1;
                 watch = Some(PathBuf::from(&arguments[i]));
             }
-            "--daemon" | "--show" | "--hide" | "--toggle" | "--status" | "--quit" => {}
+            "--daemon" | "--capture-region" | "--show" | "--hide" | "--toggle" | "--status"
+            | "--quit" => {}
             value => {
                 eprintln!("Unknown or incomplete option: {value}. Run pegline --help.");
                 std::process::exit(2);

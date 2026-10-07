@@ -14,6 +14,9 @@ public:
   void setItems(const QJsonArray &items);
   void setRevealed(bool revealed, bool animate = true);
   bool isRevealed() const;
+  bool isFlying() const {
+    return arrival.state() == QVariantAnimation::Running;
+  }
   QRect cardRect(int index) const;
   QImage renderFrame() const;
   bool action(const QString &operation, const QString &path);
@@ -39,8 +42,12 @@ private:
   };
   QList<Card> cards;
   QJsonArray lastItems;
-  QTimer hideTimer, holdTimer, hoverTimer, breezeTimer;
-  QVariantAnimation slide;
+  QTimer hideTimer, holdTimer, hoverTimer, breezeTimer, captureTimer;
+  QVariantAnimation slide, arrival;
+  QImage flightImage;
+  QString flightPath;
+  QRectF flightStart;
+  bool initialized = false;
   QElapsedTimer clock;
   bool revealed = false, dragging = false, held = false;
   bool retiring = false;
@@ -53,4 +60,6 @@ private:
   QRect sensor() const;
   int cardAt(QPoint point) const;
   void updateInput();
+  void showCapture(const QString &path);
+  void stopFlight();
 };
