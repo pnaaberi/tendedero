@@ -95,10 +95,11 @@ proof of physical shortcut delivery. See the
 [desktop checklist](../development.md#desktop-checks).
 
 The new spring motion was verified with rendered frames and input events in
-the offscreen Qt platform. The current environment blocks desktop IPC and
-GitHub network access, so live compositor verification and publication of the
-latest bug-fix and motion commits are pending. The verified release executable
-is installed; a desktop-session restart of `pegline.service` loads it.
+the offscreen Qt platform. Live compositor verification of this motion remains
+pending because the verification session could not access desktop IPC. The
+verified release executable is installed; a desktop-session restart of
+`pegline.service` loads it. The running process was not reverified after this
+installation.
 
 ## Review corrections
 
