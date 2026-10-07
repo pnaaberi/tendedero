@@ -5,6 +5,7 @@
 #include <QBuffer>
 #include <QClipboard>
 #include <QDrag>
+#include <QEnterEvent>
 #include <QImageReader>
 #include <QJsonObject>
 #include <QMenu>
@@ -221,7 +222,7 @@ void Panel::retire() {
   if (!currentMenu && !dragging)
     deleteLater();
 }
-QRect Panel::sensor() const { return QRect((width() - 360) / 2, 0, 360, 3); }
+QRect Panel::sensor() const { return QRect((width() - 32) / 2, 0, 32, 4); }
 
 QRect Panel::cardRect(int index) const {
   if (index < 0 || index >= cards.size())
@@ -263,11 +264,9 @@ QImage Panel::renderFrame() const {
   frame.fill(Qt::transparent);
   QPainter painter(&frame);
   painter.setRenderHint(QPainter::Antialiasing);
-  if (progress < .01) {
-    painter.setPen(QPen(QColor(119, 203, 171, 170), 2));
-    painter.drawLine(width() / 2 - 24, 1, width() / 2 + 24, 1);
+  painter.fillRect(sensor(), QColor(119, 203, 171, 170));
+  if (progress < .01)
     return frame;
-  }
   painter.setOpacity(progress);
   painter.save();
   painter.translate(0, -(1 - progress) * 215);
@@ -425,7 +424,8 @@ void Panel::mousePressEvent(QMouseEvent *event) {
   hideTimer.stop();
   int index = cardAt(event->position().toPoint());
   if (index < 0) {
-    setRevealed(true);
+    if (sensor().contains(event->position().toPoint()))
+      setRevealed(true);
     return;
   }
   QString path = cards[index].path;
@@ -488,9 +488,12 @@ void Panel::mouseDoubleClickEvent(QMouseEvent *event) {
 
 void Panel::mouseMoveEvent(QMouseEvent *event) {
   hideTimer.stop();
-  if (!revealed && sensor().contains(event->position().toPoint()) &&
-      !hoverTimer.isActive())
-    hoverTimer.start();
+  if (!revealed) {
+    if (!sensor().contains(event->position().toPoint()))
+      hoverTimer.stop();
+    else if (!hoverTimer.isActive())
+      hoverTimer.start();
+  }
   if (pressed.isEmpty() || held || dragging ||
       (event->position().toPoint() - down).manhattanLength() <
           QApplication::startDragDistance())
@@ -530,8 +533,12 @@ bool Panel::event(QEvent *event) {
     return QRasterWindow::event(event);
   if (event->type() == QEvent::Enter) {
     hideTimer.stop();
-    if (!revealed)
+    if (!revealed &&
+        sensor().contains(
+            static_cast<QEnterEvent *>(event)->position().toPoint()))
       hoverTimer.start();
+    else
+      hoverTimer.stop();
   }
   if (event->type() == QEvent::Leave) {
     hoverTimer.stop();

@@ -1,6 +1,7 @@
 #include "../ui/panel.hpp"
 #include <QApplication>
 #include <QClipboard>
+#include <QEnterEvent>
 #include <QFile>
 #include <QJsonObject>
 #include <QMenu>
@@ -151,7 +152,9 @@ int main(int argc, char **argv) {
     require(!panel.mask().contains(QPoint(4, 170)),
             "empty space must pass input through");
     QImage render = panel.renderFrame();
-    require(!render.isNull() && render.pixelColor(card.center()).alpha() > 0,
+    QPoint cardPixel(int((card.center().x() + .5) * render.devicePixelRatio()),
+                     int((card.center().y() + .5) * render.devicePixelRatio()));
+    require(!render.isNull() && render.pixelColor(cardPixel).alpha() > 0,
             "revealed screenshot must render");
     QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, card.center());
     const QMimeData *clipboard = app.clipboard()->mimeData();
@@ -173,6 +176,41 @@ int main(int argc, char **argv) {
             "hidden card must not intercept clicks");
     require(panel.mask().contains(QPoint(panel.width() / 2, 1)),
             "hidden line must keep its hover sensor");
+
+    QImage hidden = panel.renderFrame();
+    QRegion visibleTrigger;
+    for (int y = 0; y < panel.height(); ++y)
+      for (int x = 0; x < panel.width(); ++x)
+        if (hidden
+                .pixelColor(int((x + .5) * hidden.devicePixelRatio()),
+                            int((y + .5) * hidden.devicePixelRatio()))
+                .alpha())
+          visibleTrigger |= QRect(x, y, 1, 1);
+    require(visibleTrigger.boundingRect().width() <= 32 &&
+                visibleTrigger.boundingRect().height() == 4,
+            "hidden trigger must be narrower and four pixels thick");
+    require(panel.mask() == visibleTrigger,
+            "only visible trigger pixels must receive input when hidden");
+    auto enterAt = [&](QPoint point) {
+      QEnterEvent enter(point, point, panel.mapToGlobal(point));
+      QCoreApplication::sendEvent(&panel, &enter);
+    };
+    QPoint outside(panel.width() / 2 + 100, 1);
+    enterAt(outside);
+    QTest::qWait(150);
+    require(!panel.isRevealed(),
+            "hover beside the visible trigger must not summon the line");
+    QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, outside);
+    require(!panel.isRevealed(),
+            "click beside the visible trigger must not summon the line");
+    QPoint trigger = visibleTrigger.boundingRect().center();
+    enterAt(trigger);
+    QTest::qWait(150);
+    require(panel.isRevealed(), "hover over the visible trigger must reveal");
+    panel.setRevealed(false, false);
+    QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, trigger);
+    require(panel.isRevealed(), "click on the visible trigger must reveal");
+    panel.setRevealed(false, false);
 
     bool handlerActive = false, destroyedDuringInteraction = false;
     QPointer<Panel> retiring =
