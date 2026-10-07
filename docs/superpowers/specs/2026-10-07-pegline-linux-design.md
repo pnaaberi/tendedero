@@ -34,6 +34,8 @@ the user's preferred Rust core. A web wrapper adds an unnecessary runtime.
 - Watch Spectacle's configured image directory, using its settings rather than hardcoding
   the user's home directory. Allow `--watch DIRECTORY` as an explicit override.
 - New complete images appear on a gently sagging line at the top of the screen.
+  Revealing the line has a small spring overshoot. Landing and copying nudge
+  cards into a damped swing and briefly flex the rope; input follows the cards.
   Accept PNG, JPEG, WebP, BMP, GIF, and TIFF when Qt can decode them. Ignore
   videos, hidden files, directories, symlinks, and incomplete image writes.
 - Show up to eight recent screenshots. Prune moved or deleted files. Keep

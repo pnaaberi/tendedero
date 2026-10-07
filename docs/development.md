@@ -70,6 +70,11 @@ and landing, the full ten-second preview, timer reset,
 early hide, and quiet restoration of historical images. The arrival check
 takes about thirteen seconds because it exercises real timers.
 
+The motion mode checks visible reveal overshoot and settling, copy feedback,
+input regions around swinging images, clicks and double-clicks at displaced
+card edges, consistent poses between animation ticks, and restoration of the
+small hidden trigger. It is included in `check-ui.sh`.
+
 ## Desktop checks
 
 Offscreen rendering cannot establish compositor behavior or hardware shortcut
@@ -129,6 +134,13 @@ JSON snapshots carry modification time and file size as strings to preserve
 their integer values. Qt uses both for thumbnail identity. Incomplete thumbnail
 reads are retried on later snapshots; retrying the initial panel snapshot keeps
 restoration quiet, while a new live capture still starts its arrival effect.
+
+The reveal uses Qt's spring-like easing. Short damped pulses swing cards and
+flex the rope on reveal, landing, and copy. Painting, input regions, card hits,
+and the dismiss control share the card transform and a sampled animation time.
+Rapid clicks preserve the active swing for Qt's double-click interval. The
+existing 40 ms breeze timer refreshes painting and input regions and stops
+while hidden.
 
 Each screen shares the same card list. A 32-by-4 logical-pixel marker at the
 top center supplies both the painted trigger and the hidden panel's entire

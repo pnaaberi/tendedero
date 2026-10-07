@@ -1,9 +1,8 @@
 # Pegline Linux verification
 
-Last verified: **2026-10-07**. Application source:
-[`d7312c5`](https://github.com/pnaaberi/tendedero/commit/d7312c5b71ffae9c6f7607e6c769fd9ca86b4aff).
+Last verified: **2026-10-07**. Application source: `fe9eed6`.
 This record covers the Rust/Qt port and the shipped region-capture, screenshot
-flight, ten-second reveal, visible-trigger, and thumbnail-recovery updates.
+flight, ten-second reveal, visible-trigger, thumbnail-recovery, and spring-motion updates.
 It records completed checks, not a promise of support for every desktop
 configuration.
 
@@ -13,7 +12,7 @@ configuration.
 ## Automated evidence
 
 - **12 Rust unit tests** and **one native Qt integration test** passed. The
-  integration test runs both the normal UI smoke mode and the arrival mode.
+  integration test runs the normal UI smoke, motion, and arrival modes.
 - The filesystem suite covers stable writes and decode retries, filtering,
   eight-card capacity, dismissal persistence, removed files, scan recovery,
   corrupt-state preservation, settings parsing, copy collisions, and the
@@ -29,6 +28,12 @@ configuration.
 - The hidden trigger's painted pixels match its entire input region: 32 by
   4 logical pixels. Outside hover and click do not reveal it. Fractional edge
   checks exercise hover, movement, and press at normal and 1.75 scaling.
+- Motion checks verify visible spring overshoot and settling, copy swing,
+  moving image input regions, real copy and open gestures from a displaced
+  card edge after a stalled event loop, and matching poses between animation
+  ticks. They passed at normal and 1.75 scaling, including AddressSanitizer and
+  UndefinedBehaviorSanitizer with leak detection excluded. The hidden input
+  region returns to the marker.
 - Arrival checks inspect rendered frames to establish upward travel, preview
   click-through, landing, restored card input, the full ten-second timer,
   pointer-leave behavior, repeated-capture reset, manual hide, and retained
@@ -43,7 +48,7 @@ configuration.
   error exit codes. AddressSanitizer and UndefinedBehaviorSanitizer checks
   passed for native smoke and arrival; leak detection was excluded.
 
-## Live KDE evidence
+## Live KDE evidence before the spring-motion update
 
 Verified on CachyOS with KDE Plasma Wayland, Rust 1.97.1, Qt 6.11.2,
 LayerShellQt 6.7.5, and Spectacle 6.7.5. Capture arrival was checked on two
@@ -78,6 +83,12 @@ flight checks above were separate live checks; do not treat a script pass as
 proof of physical shortcut delivery. See the
 [desktop checklist](../development.md#desktop-checks).
 
+The new spring motion was verified with rendered frames and input events in
+the offscreen Qt platform. The current environment blocks desktop IPC and
+GitHub network access, so live compositor verification and publication of the
+latest bug-fix and motion commits are pending. The verified release executable
+is installed; a desktop-session restart of `pegline.service` loads it.
+
 ## Review corrections
 
 Whole-port review produced fixes for panel lifetime during nested Qt handlers,
@@ -97,6 +108,12 @@ stale thumbnails after same-timestamp size changes. Review also reproduced a
 thumbnail disappearing permanently after a transient read failure. Regression
 cases failed before the fixes and passed afterward; cached snapshots now
 distinguish complete decodes and retain the initial restoration baseline.
+
+Motion review reproduced a copy pulse snapping an already-swinging card away
+from a double-click, and instrumented checks exposed differing poses between
+painting and input. Regression checks failed before the fixes and passed
+afterward. Rapid clicks preserve the active pulse, and geometry shares one
+sampled animation time, including the retrigger guard after delayed input.
 
 ## Supported limits
 

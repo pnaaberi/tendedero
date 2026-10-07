@@ -10,6 +10,9 @@ Press **Meta+Shift+S**, drag to select a region, and release. The screenshot
 flies from screen center onto the line, which opens for **10 seconds**.
 Another capture resets the timer. **Meta+Alt+T** hides it early.
 
+The line opens with a soft bounce. Cards swing gently when a screenshot lands
+or you copy it, and the rope gives a little with the movement.
+
 Pegline keeps eight recent images, starts when you sign in to KDE, and leaves
 your screenshot files in place when you dismiss cards or close the app.
 
