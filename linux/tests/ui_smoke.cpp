@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QEnterEvent>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QMenu>
 #include <QMimeData>
@@ -243,6 +244,81 @@ int main(int argc, char **argv) {
               "fractional movement must match the visible trigger boundary");
       panel.setRevealed(false, false);
     }
+
+    QString delayedPath = directory.filePath("delayed.png");
+    QString unavailablePath = directory.filePath("unavailable.png");
+    require(fixture.save(delayedPath), "create delayed thumbnail");
+    auto delayedItems = QJsonArray{QJsonObject{
+        {"path", delayedPath}, {"modified", "1"},
+        {"size", QString::number(QFileInfo(delayedPath).size())}, {"new", true}}};
+    require(QFile::rename(delayedPath, unavailablePath), "make thumbnail temporarily unavailable");
+    Panel delayed(app.primaryScreen());
+    delayed.setItems(delayedItems);
+    require(!delayed.cardRect(0).isValid(), "unavailable thumbnail must not create a card");
+    require(QFile::rename(unavailablePath, delayedPath), "restore thumbnail without changing its fingerprint");
+    delayed.setItems(delayedItems);
+    require(delayed.cardRect(0).isValid(),
+            "unchanged snapshots must retry a previously unreadable thumbnail");
+    require(!delayed.isRevealed() && !delayed.isFlying(),
+            "retrying the first snapshot must still restore history quietly");
+
+    Panel liveRetry(app.primaryScreen());
+    liveRetry.setItems({});
+    require(QFile::rename(delayedPath, unavailablePath), "temporarily hide live thumbnail");
+    liveRetry.setItems(delayedItems);
+    require(QFile::rename(unavailablePath, delayedPath), "restore live thumbnail");
+    liveRetry.setItems(delayedItems);
+    require(liveRetry.isRevealed() && liveRetry.isFlying(),
+            "a new live capture must fly in once its thumbnail can be read");
+    liveRetry.setItems(delayedItems);
+    liveRetry.setRevealed(false, false);
+
+    QString editedPath = directory.filePath("edited.png");
+    require(fixture.save(editedPath), "create editable image");
+    QString oldSize = QString::number(QFileInfo(editedPath).size());
+    Panel edited(app.primaryScreen());
+    edited.setItems(QJsonArray{QJsonObject{{"path", editedPath},
+                                         {"modified", "1"},
+                                         {"size", oldSize},
+                                         {"new", false}}});
+    QImage replacement(480, 100, QImage::Format_ARGB32);
+    replacement.fill(QColor("#be8b58"));
+    require(replacement.save(editedPath), "replace editable image");
+    QString newSize = QString::number(QFileInfo(editedPath).size());
+    require(newSize != oldSize, "replacement must have a different file size");
+    edited.setItems(QJsonArray{QJsonObject{{"path", editedPath},
+                                         {"modified", "1"},
+                                         {"size", newSize},
+                                         {"new", false}}});
+    edited.setRevealed(true, false);
+    QImage refreshed = edited.renderFrame();
+    QPoint refreshedCenter = edited.cardRect(0).center();
+    QPoint refreshedPixel(int((refreshedCenter.x() + .5) * refreshed.devicePixelRatio()),
+                          int((refreshedCenter.y() + .5) * refreshed.devicePixelRatio()));
+    require(refreshed.pixelColor(refreshedPixel) == QColor("#be8b58"),
+            "a different-size image with unchanged timestamp must refresh its thumbnail");
+
+    panel.setRevealed(true, false);
+    bool revealedDuringMenu = false;
+    QTimer::singleShot(10, &app, [&] {
+      QEvent leave(QEvent::Leave);
+      QCoreApplication::sendEvent(&panel, &leave);
+    });
+    QTimer::singleShot(900, &app, [&] {
+      revealedDuringMenu = panel.isRevealed();
+      for (QWidget *widget : QApplication::topLevelWidgets())
+        if (auto menu = qobject_cast<QMenu *>(widget))
+          menu->close();
+    });
+    QTest::mousePress(&panel, Qt::RightButton, Qt::NoModifier,
+                     panel.cardRect(0).center());
+    require(revealedDuringMenu,
+            "pointer leave must not hide the line under an active card menu");
+    QEvent afterMenuLeave(QEvent::Leave);
+    QCoreApplication::sendEvent(&panel, &afterMenuLeave);
+    QTest::qWait(900);
+    require(!panel.isRevealed(),
+            "manual reveal must hide when the pointer leaves after menu closure");
 
     bool handlerActive = false, destroyedDuringInteraction = false;
     QPointer<Panel> retiring =

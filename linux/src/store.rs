@@ -172,6 +172,10 @@ impl Store {
         self.known.get(path).map_or(0, |stamp| stamp.modified)
     }
 
+    pub fn size(&self, path: &Path) -> u64 {
+        self.known.get(path).map_or(0, |stamp| stamp.size)
+    }
+
     /// Historical files may finish settling after the UI's first snapshot.
     pub fn is_new_capture(&self, path: &Path) -> bool {
         self.known.get(path).is_some_and(|stamp| {

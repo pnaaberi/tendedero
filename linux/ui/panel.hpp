@@ -41,13 +41,13 @@ private:
     QImage image;
   };
   QList<Card> cards;
-  QJsonArray lastItems;
+  QJsonArray lastItems, initialItems;
   QTimer hideTimer, holdTimer, hoverTimer, breezeTimer, captureTimer;
   QVariantAnimation slide, arrival;
   QImage flightImage;
   QString flightPath;
   QRectF flightStart;
-  bool initialized = false;
+  bool initialized = false, thumbnailsComplete = false;
   QElapsedTimer clock;
   bool revealed = false, dragging = false, held = false;
   bool retiring = false;

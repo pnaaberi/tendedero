@@ -47,7 +47,7 @@ Panel::Panel(QScreen *output) {
   hideTimer.setSingleShot(true);
   hideTimer.setInterval(650);
   QObject::connect(&hideTimer, &QTimer::timeout, this, [this] {
-    if (!dragging && !captureTimer.isActive())
+    if (!dragging && !currentMenu && !captureTimer.isActive())
       setRevealed(false);
   });
   captureTimer.setSingleShot(true);
@@ -97,15 +97,19 @@ Panel::Panel(QScreen *output) {
 void Panel::setItems(const QJsonArray &items) {
   if (retiring || dragging)
     return;
-  bool restored = !initialized;
-  initialized = true;
-  if (items == lastItems)
+  if (!initialized) {
+    initialItems = items;
+    initialized = true;
+  }
+  if (items == lastItems && thumbnailsComplete)
     return;
   QList<Card> next;
   QString newCapture;
+  bool complete = true;
   for (const auto &value : items) {
     auto item = value.toObject();
-    QString path = item["path"].toString(), stamp = item["modified"].toString();
+    QString path = item["path"].toString();
+    QString stamp = item["modified"].toString() + ":" + item["size"].toString();
     auto previous =
         std::find_if(cards.begin(), cards.end(), [&](const Card &card) {
           return card.path == path && card.stamp == stamp;
@@ -122,12 +126,14 @@ void Panel::setItems(const QJsonArray &items) {
     QImage image = reader.read();
     if (!image.isNull()) {
       next.append({path, stamp, image});
-      if (!restored && item["new"].toBool())
+      if (!initialItems.contains(value) && item["new"].toBool())
         newCapture = path;
-    }
+    } else
+      complete = false;
   }
   cards = next;
   lastItems = items;
+  thumbnailsComplete = complete;
   updateInput();
   update();
   if (!newCapture.isEmpty())
