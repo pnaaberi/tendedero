@@ -27,6 +27,7 @@ pub struct Store {
     state: PathBuf,
     known: BTreeMap<PathBuf, Fingerprint>,
     samples: BTreeMap<PathBuf, Fingerprint>,
+    startup: Option<BTreeMap<PathBuf, Fingerprint>>,
     rejected: BTreeMap<PathBuf, (Fingerprint, u8)>,
     dirty: bool,
 }
@@ -71,6 +72,7 @@ impl Store {
             state,
             known: saved.known,
             samples: BTreeMap::new(),
+            startup: None,
             rejected: BTreeMap::new(),
             error: None,
             warning,
@@ -120,6 +122,7 @@ impl Store {
                 },
             );
         }
+        self.startup.get_or_insert_with(|| current.clone());
         let before = self.items.clone();
         let before_known = self.known.clone();
         self.items.retain(|path| current.contains_key(path));
@@ -167,6 +170,15 @@ impl Store {
 
     pub fn modified(&self, path: &Path) -> u64 {
         self.known.get(path).map_or(0, |stamp| stamp.modified)
+    }
+
+    /// Historical files may finish settling after the UI's first snapshot.
+    pub fn is_new_capture(&self, path: &Path) -> bool {
+        self.known.get(path).is_some_and(|stamp| {
+            self.startup
+                .as_ref()
+                .is_some_and(|initial| initial.get(path) != Some(stamp))
+        })
     }
 
     pub fn save_copy(&self, path: &Path, destination: &Path) -> io::Result<PathBuf> {
@@ -350,6 +362,41 @@ mod tests {
         );
         s.scan(|_| true).unwrap();
         assert_eq!(s.items, vec![path]);
+    }
+
+    #[test]
+    fn separates_startup_imports_from_live_captures() {
+        let f = Fixture::new();
+        let historical = f.image("historical.png");
+        let mut s = f.store();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(s.items.contains(&historical));
+        assert!(
+            !s.is_new_capture(&historical),
+            "startup import must stay quiet"
+        );
+
+        let live = f.image("live.png");
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(s.is_new_capture(&live), "live capture must animate");
+        fs::write(&historical, b"a changed screenshot after startup").unwrap();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(s.is_new_capture(&historical), "changed image must animate");
+
+        let offline = f.image("offline.png");
+        let mut restarted = f.store();
+        restarted.scan(|_| true).unwrap();
+        restarted.scan(|_| true).unwrap();
+        assert!(restarted.items.contains(&offline));
+        for path in [&historical, &live, &offline] {
+            assert!(
+                !restarted.is_new_capture(path),
+                "restart must restore quietly"
+            );
+        }
     }
 
     #[test]

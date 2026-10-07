@@ -42,6 +42,13 @@ int main(int argc, char **argv) {
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
     if (app.arguments().contains("--arrival")) {
+      Panel restored(app.primaryScreen());
+      restored.setItems({});
+      restored.setItems(QJsonArray{
+          QJsonObject{{"path", path}, {"modified", "1"}, {"new", false}}});
+      require(
+          !restored.isRevealed() && !restored.isFlying(),
+          "files imported after startup stability checks must restore quietly");
       Panel arrivals(app.primaryScreen());
       arrivals.setItems({});
       arrivals.show();
@@ -49,8 +56,8 @@ int main(int argc, char **argv) {
               "restored history must not open the line");
       QElapsedTimer sinceCapture;
       sinceCapture.start();
-      arrivals.setItems(
-          QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+      arrivals.setItems(QJsonArray{
+          QJsonObject{{"path", path}, {"modified", "1"}, {"new", true}}});
       require(arrivals.isRevealed(),
               "a new screenshot must reveal Pegline automatically");
       require(arrivals.isFlying(),
@@ -90,8 +97,9 @@ int main(int argc, char **argv) {
           "pointer leave must not shorten the capture's ten-second preview");
       QString second = directory.filePath("second.png");
       require(fixture.save(second), "create second capture");
-      auto items = QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}},
-                              QJsonObject{{"path", second}, {"modified", "2"}}};
+      auto items = QJsonArray{
+          QJsonObject{{"path", path}, {"modified", "1"}, {"new", true}},
+          QJsonObject{{"path", second}, {"modified", "2"}, {"new", true}}};
       QElapsedTimer sinceSecond;
       sinceSecond.start();
       arrivals.setItems(items);
@@ -104,7 +112,8 @@ int main(int argc, char **argv) {
       QTest::qWait(500);
       require(!arrivals.isRevealed(),
               "preview must hide after ten seconds without dismissal");
-      items[1] = QJsonObject{{"path", second}, {"modified", "3"}};
+      items[1] =
+          QJsonObject{{"path", second}, {"modified", "3"}, {"new", true}};
       arrivals.setItems(items);
       require(arrivals.isRevealed(), "next capture must reveal again");
       arrivals.setRevealed(false, false);

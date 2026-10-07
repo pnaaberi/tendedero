@@ -121,7 +121,7 @@ void Panel::setItems(const QJsonArray &items) {
     QImage image = reader.read();
     if (!image.isNull()) {
       next.append({path, stamp, image});
-      if (!restored)
+      if (!restored && item["new"].toBool())
         newCapture = path;
     }
   }

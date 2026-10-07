@@ -13,8 +13,8 @@ You can also move the pointer to the **top center of your screen** or press
 The app lives in your system tray and starts with your graphical session.
 
 | Gesture | Action |
-| Meta+Shift+S | Capture a region directly to Pegline |
 | --- | --- |
+| Meta+Shift+S | Capture a region directly to Pegline |
 | Click a screenshot | Copy the full image and file URL |
 | Double-click | Open in your usual image viewer |
 | Hold for 450 ms | Annotate in Spectacle |

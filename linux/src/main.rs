@@ -40,7 +40,7 @@ extern "C" fn pg_snapshot() -> *mut c_char {
         });
         owned_json(json!({
             "watch": store.watch.to_string_lossy(),
-            "items": store.items.iter().map(|path| json!({"path": path.to_string_lossy(), "modified": store.modified(path).to_string()})).collect::<Vec<_>>(),
+            "items": store.items.iter().map(|path| json!({"path": path.to_string_lossy(), "modified": store.modified(path).to_string(), "new": store.is_new_capture(path)})).collect::<Vec<_>>(),
             "error": store.error,
             "warning": store.warning,
         }))
