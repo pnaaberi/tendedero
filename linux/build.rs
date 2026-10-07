@@ -28,6 +28,7 @@ fn main() {
         "Qt6Core",
         "LayerShellQtInterface",
         "KF6GlobalAccel",
+        "wayland-client",
         "stdc++",
     ] {
         println!("cargo:rustc-link-lib={library}");

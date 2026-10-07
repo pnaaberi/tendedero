@@ -1,4 +1,5 @@
 #include "panel.hpp"
+#include "clipboard.hpp"
 #include <LayerShellQt/Window>
 #include <QApplication>
 #include <QBuffer>
@@ -283,6 +284,7 @@ bool Panel::action(const QString &operation, const QString &path) {
     mime->setData("image/png", png);
     mime->setUrls({QUrl::fromLocalFile(path)});
     QApplication::clipboard()->setMimeData(mime);
+    setNativeClipboard(png, QUrl::fromLocalFile(path).toEncoded() + "\r\n");
     copied = path;
     copiedUntil = clock.elapsed() + 1400;
     update();

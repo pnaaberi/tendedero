@@ -102,10 +102,10 @@ public:
     shortcut.setProperty("componentName", "org.choppy.Pegline");
     shortcut.setProperty("componentDisplayName", "Pegline");
     const QKeySequence keys("Meta+Alt+T");
-    if (KGlobalAccel::isGlobalShortcutAvailable(keys, "org.choppy.Pegline"))
-      KGlobalAccel::setGlobalShortcut(&shortcut, keys);
-    else
-      report("Meta+Alt+T is already assigned. Use Pegline's tray icon or KDE "
+    // Autoload this action's saved binding. KDE drops conflicting keys without
+    // taking another application's shortcut, and preserves user customizations.
+    if (!KGlobalAccel::setGlobalShortcut(&shortcut, keys))
+      report("Could not register Pegline's shortcut. Use its tray icon or KDE "
              "shortcut settings.");
     QObject::connect(&shortcut, &QAction::triggered, this,
                      [this] { control("Toggle"); });

@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
-project(PeglineUI LANGUAGES CXX)
+project(PeglineUI LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets DBus)
 find_package(LayerShellQt 6.6 REQUIRED)
 find_package(KF6GlobalAccel REQUIRED)
-add_library(pegline_ui STATIC panel.cpp pegline.cpp)
-target_link_libraries(pegline_ui PUBLIC Qt6::Widgets Qt6::DBus LayerShellQt::Interface KF6::GlobalAccel)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client)
+find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/data-control.h ${CMAKE_CURRENT_BINARY_DIR}/data-control.c
+  COMMAND ${WAYLAND_SCANNER} client-header ${CMAKE_CURRENT_SOURCE_DIR}/ext-data-control-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/data-control.h
+  COMMAND ${WAYLAND_SCANNER} private-code ${CMAKE_CURRENT_SOURCE_DIR}/ext-data-control-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/data-control.c
+  DEPENDS ext-data-control-v1.xml)
+add_library(pegline_ui STATIC panel.cpp pegline.cpp clipboard.cpp ${CMAKE_CURRENT_BINARY_DIR}/data-control.c)
+target_include_directories(pegline_ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(pegline_ui PUBLIC Qt6::Widgets Qt6::DBus LayerShellQt::Interface KF6::GlobalAccel PkgConfig::WAYLAND)
 target_compile_options(pegline_ui PRIVATE -Wall -Wextra -Wpedantic)
 option(PEGLINE_BUILD_TESTS "Build native UI smoke tests" OFF)
 if(PEGLINE_BUILD_TESTS)

@@ -1,147 +1,134 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
-  <img src="docs/hero-light.png" alt="Tendedero. Screenshots, hung out to dry. Three screenshots in glass frames hang from a thin line under the macOS menu bar.">
-</picture>
+# Pegline
 
-<p align="center">
-  Free and open source. For macOS 14 and later.
-  <br>
-  <a href="../../releases/latest">Download&nbsp;&rsaquo;</a>
-  &nbsp;&nbsp;
-  <a href="#build-from-source">Build from source&nbsp;&rsaquo;</a>
-</p>
+Screenshots, hanging within reach. A native **KDE Wayland** port of
+[Alejandro Buján's Tendedero](https://github.com/alejandrobujan/tendedero), with a
+Rust core and a small Qt6 interface.
 
-<br>
+Move the pointer to the **top center of your screen** or press **Meta+Alt+T**.
+Recent screenshots hang from a line; move away and it tucks back out of sight.
+The app lives in your system tray and starts with your graphical session.
 
-## Out of sight. Within reach.
+| Gesture | Action |
+| --- | --- |
+| Click a screenshot | Copy the full image and file URL |
+| Double-click | Open in your usual image viewer |
+| Hold for 450 ms | Annotate in Spectacle |
+| Drag into an app or folder | Share a real file; file managers handle moves |
+| Right-click | Copy, open, annotate, show in folder, save a copy, or take down |
+| Click the cross | Take down the card and keep its file |
+| Meta+Alt+T / tray icon | Show or hide the line |
 
-Every screenshot you take hangs on a line just above your screen.
-Rest the pointer in the menu bar and it glides down. Move away and it's gone.
+Pegline reads Spectacle's screenshot folder from `spectaclerc`, watches for
+complete image files, and remembers up to eight recent captures across
+restarts. It ignores video recordings. Dismissing cards, exceeding the limit,
+and quitting **never delete your screenshots**. Saving to Pictures creates a
+unique filename and never overwrites an existing file.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/demo-dark.gif">
-  <img src="docs/demo-light.gif" alt="The pointer rests against the top edge, the line slides down with three screenshots swinging gently, a click copies one, and the line tucks away when the pointer leaves.">
-</picture>
+Use your existing Print Screen shortcuts. The tray also offers region and
+current-screen captures. Pegline does not change your Spectacle preferences.
+No account, network access, or telemetry is used at runtime.
 
-<br>
-<br>
+## Install on CachyOS / Arch KDE
 
-## A gesture for everything.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/bento-dark.png">
-  <img src="docs/bento-light.png" alt="Click to copy. Hold to mark up. Drag to share. Let it go.">
-</picture>
-
-<br>
-<br>
-
-| | |
-|:--|:--|
-| Click | Copy the image. |
-| Press and hold | Open it in Markup. |
-| Double click | Open it in Preview. |
-| Drag into an app | Send a copy. It stays on the line. |
-| Drag into a folder | Keep it there. It leaves the line. |
-| Drag to the Trash, or click the cross | Let it go. |
-| Rest the pointer in the menu bar | Bring the line down on that screen. |
-| Click anything in the menu bar | Put it away. |
-| <kbd>⌃</kbd>&thinsp;<kbd>⌥</kbd>&thinsp;<kbd>T</kbd> | Show or hide the line. |
-
-<br>
-
-## Your Desktop. Finally clear.
-
-Hand Tendedero your screenshots<sup>1</sup> and they skip the Desktop
-entirely. No floating thumbnail. No five-second wait. Each capture hangs
-the instant you take it, and only what you drag out is kept.
-
-Same shortcuts. Same muscle memory. Just less mess.
-
-<br>
-
-## Private by design.
-
-No account. No network. No analytics.
-Tendedero runs entirely on your Mac, and your screenshots never leave it.
-
-<br>
-
-## Tech Specs
-
-| | |
-|:--|:--|
-| **Compatibility** | macOS 14 Sonoma or later, on Apple silicon and Intel. Designed for macOS 27. |
-| **Size** | 1.7 MB |
-| **Languages** | English, Spanish |
-| **Built with** | Swift, AppKit and SwiftUI |
-| **Network access** | None |
-| **Price** | Free |
-| **License** | MIT for the code. The name and icon are not included. |
-
-<br>
-
-## Install
-
-Download the disk image from the [latest release](../../releases/latest),
-open it and drag Tendedero to Applications.
-
-Tendedero is not notarized by Apple yet, so the first time macOS will say it
-cannot verify it. Open System Settings, go to Privacy & Security, and click
-Open Anyway next to the message about Tendedero. You only need to do this once.
-
-<br>
-
-## Build from source
+Tested with CachyOS, KDE Wayland, Rust 1.97.1, and Qt 6.11.2.
+Qt6, KDE LayerShellQt, KF6GlobalAccel, Wayland development files, Spectacle, CMake, Ninja, and a C++ compiler
+are required. If those development packages are missing:
 
 ```sh
-git clone git@github.com:alejandrobujan/tendedero.git
-cd tendedero
-scripts/build-app.sh
-open build/Tendedero.app
+sudo pacman -S --needed rust base-devel cmake ninja qt6-base qt6-wayland wayland layer-shell-qt kglobalaccel spectacle
 ```
 
-Requires the Swift toolchain. Xcode is optional. With the Command Line Tools for macOS 27, the script falls back to the macOS 26 SDK they install alongside, because the new SDK needs a SwiftUI macro plugin only Xcode includes. Local builds are signed ad hoc,
-so macOS asks again for access to the Desktop after each rebuild.
+```sh
+git clone --branch linux-pegline https://github.com/pnaaberi/tendedero.git
+cd tendedero
+bash linux/scripts/install.sh
+```
 
-<details>
-<summary>Inside the app</summary>
-<br>
+The installer builds a release executable and installs `~/.local/bin/pegline`,
+an application-menu entry, its own icon, and a systemd user service. No root
+access is used by the installer. `~/.local/bin` must be on your desktop's PATH.
+Use `--no-start` to install without enabling or starting the service.
 
-| File | Role |
-|:--|:--|
-| `AppDelegate.swift` | Menu bar, shortcut, revealing and tucking away the line |
-| `LinePanel.swift` | The transparent strip along the top of the screen |
-| `LineView.swift` | The line and where each photo hangs |
-| `PeggedView.swift` | One photo: glass frame, clip, swing and breeze |
-| `GrabArea.swift` | Click, long press, drag and drop |
-| `ScreenshotWatcher.swift` | Notices new screenshots |
-| `Inbox.swift` | Takes over screenshot settings and puts them back |
-| `Markup.swift` | Opens the system Markup editor and saves the result |
-| `FullScreen.swift` | Knows when to stay hidden |
-| `Line.swift` | What is hanging, and what you can do with it |
+## Commands
 
-Every image here, the icon included, is drawn in code by
-`scripts/make-icon.swift` and `scripts/make-readme-art.swift`.
-`scripts/make-dmg.sh` builds the disk image for releases.
+```sh
+pegline --show
+pegline --hide
+pegline --toggle
+pegline --status
+pegline --quit
+```
 
-</details>
+To watch another screenshot folder, stop the service and launch with an override:
 
-<br>
+```sh
+systemctl --user stop pegline
+pegline --watch "$HOME/Pictures/Screenshots"
+```
 
----
+Use a systemd service override to make an alternate folder permanent. Set the
+KDE shortcut in System Settings → Keyboard → Shortcuts → Pegline. Pegline
+leaves an already assigned shortcut alone; its tray icon always remains usable.
 
-<sub>
-1. On first launch, Tendedero offers to handle your screenshots. If you accept, it turns off the floating thumbnail and saves new screenshots to its own folder, two settings also found under Options in Cmd+Shift+5. Your previous settings are saved and restored when Tendedero quits or the option is turned off from the menu bar. Tendedero hides automatically while an app is in full screen.
-</sub>
+History is kept at `${XDG_STATE_HOME:-~/.local/state}/pegline/state.json`.
+Screenshot files stay in their original folder. A corrupt history file is
+preserved beside the state file for recovery.
 
-<br>
-<br>
+```sh
+systemctl --user status pegline
+journalctl --user -u pegline -n 30
+bash linux/scripts/uninstall.sh
+```
 
-<p align="center">
-  <img src="docs/icon.png" width="64" height="64" alt="">
-  <br>
-  <sub>The code is MIT licensed. The Tendedero name and icon are not, so forks need their own. See <a href="LICENSE">LICENSE</a>.</sub>
-  <br>
-  <sub>Designed and built by <a href="https://alejandrobujan.com">Alejandro Buján</a>.</sub>
-</p>
+Uninstalling retains screenshots and history.
+
+## Build and verify
+
+```sh
+cargo build --manifest-path linux/Cargo.toml --release --locked
+cargo test --manifest-path linux/Cargo.toml
+cargo fmt --manifest-path linux/Cargo.toml --check
+cargo clippy --manifest-path linux/Cargo.toml --all-targets -- -D warnings
+```
+
+The test suite includes real filesystem tests and a native Qt smoke test for
+rendering, input regions, image clipboard content, and file retention. UI
+checks run using Qt's offscreen platform. `bash linux/scripts/check-ui.sh`
+runs just the native checks. Check the live Wayland desktop as well before
+shipping compositor-related changes.
+
+On an installed KDE session, `python linux/scripts/check-live.py` verifies
+real screenshot ingestion, image and file-URL clipboard offers, safe copying,
+dismissal, service restart, and shortcut delivery. It requires `wl-clipboard`
+and room for three temporary cards; it removes its fixtures afterward and
+keeps desktop evidence in a private temporary folder. This check restarts
+Pegline and changes the clipboard, so run it deliberately.
+
+`linux/src/store.rs` owns discovery, stability checks, history, and safe copy
+operations. `linux/src/main.rs` supplies the C ABI and command-line options.
+`linux/ui/panel.cpp` paints the line and handles gestures; `pegline.cpp` provides
+the tray, KDE shortcut, and session D-Bus controls. `clipboard.cpp` supports
+KDE's newer data-control protocol without requesting keyboard focus.
+Cargo invokes CMake to link
+the native interface. The runtime uses only Qt/KDE libraries already present
+on a KDE desktop.
+
+## Scope and attribution
+
+This port targets KDE Plasma 6 on Wayland. Other Wayland compositors need the
+layer-shell protocol and a compatible tray; they are not verified here. There
+is a basic Qt/X11 fallback, but KDE Wayland is the tested target. Multi-screen
+surfaces are implemented; the live check uses a single screen.
+
+Fullscreen stacking follows the compositor's top-layer policy. Apple Markup
+is replaced by Spectacle, and macOS capture-flight effects are not ported.
+Screenshot-directory takeover and automatic trashing are deliberately omitted.
+
+The original macOS sources and scripts remain in `Sources/Tendedero` and
+`scripts` as reference. They still require macOS; build the Linux app from
+`linux/`. Pegline uses a different app name and original icon because the
+upstream name and icon are excluded from its license. Code remains MIT
+licensed; see [LICENSE](LICENSE) for Alejandro Buján's original attribution.
+Pegline is an independent fork and is not endorsed by the upstream author.
+The vendored Wayland protocol definition carries its own permissive license
+and copyright notices in `linux/ui/ext-data-control-v1.xml`.
