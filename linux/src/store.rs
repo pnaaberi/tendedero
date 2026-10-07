@@ -248,7 +248,8 @@ pub fn spectacle_folder(settings: &str, home: &Path) -> PathBuf {
             while i < bytes.len() {
                 if bytes[i] == b'%'
                     && i + 2 < bytes.len()
-                    && let Ok(n) = u8::from_str_radix(&value[i + 1..i + 3], 16)
+                    && let Ok(hex) = std::str::from_utf8(&bytes[i + 1..i + 3])
+                    && let Ok(n) = u8::from_str_radix(hex, 16)
                 {
                     decoded.push(n);
                     i += 3;
@@ -450,5 +451,16 @@ mod tests {
                 .to_string_lossy()
                 .starts_with("state.corrupt-")
         }));
+    }
+
+    #[test]
+    fn settings_with_literal_percent_and_unicode_do_not_panic() {
+        assert_eq!(
+            spectacle_folder(
+                "[ImageSave]\nimageSaveLocation=file:///home/example/%€ Screenshots\n",
+                Path::new("/home/example")
+            ),
+            PathBuf::from("/home/example/%€ Screenshots")
+        );
     }
 }
