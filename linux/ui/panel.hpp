@@ -58,6 +58,7 @@ private:
   QPoint down;
   qint64 copiedUntil = 0;
   QRect sensor() const;
+  bool overSensor(QPointF point) const;
   int cardAt(QPoint point) const;
   void updateInput();
   void showCapture(const QString &path);

@@ -223,6 +223,10 @@ void Panel::retire() {
     deleteLater();
 }
 QRect Panel::sensor() const { return QRect((width() - 32) / 2, 0, 32, 4); }
+bool Panel::overSensor(QPointF point) const {
+  return sensor().contains(
+      QPoint(int(std::floor(point.x())), int(std::floor(point.y()))));
+}
 
 QRect Panel::cardRect(int index) const {
   if (index < 0 || index >= cards.size())
@@ -424,7 +428,7 @@ void Panel::mousePressEvent(QMouseEvent *event) {
   hideTimer.stop();
   int index = cardAt(event->position().toPoint());
   if (index < 0) {
-    if (sensor().contains(event->position().toPoint()))
+    if (overSensor(event->position()))
       setRevealed(true);
     return;
   }
@@ -489,7 +493,7 @@ void Panel::mouseDoubleClickEvent(QMouseEvent *event) {
 void Panel::mouseMoveEvent(QMouseEvent *event) {
   hideTimer.stop();
   if (!revealed) {
-    if (!sensor().contains(event->position().toPoint()))
+    if (!overSensor(event->position()))
       hoverTimer.stop();
     else if (!hoverTimer.isActive())
       hoverTimer.start();
@@ -534,8 +538,7 @@ bool Panel::event(QEvent *event) {
   if (event->type() == QEvent::Enter) {
     hideTimer.stop();
     if (!revealed &&
-        sensor().contains(
-            static_cast<QEnterEvent *>(event)->position().toPoint()))
+        overSensor(static_cast<QEnterEvent *>(event)->position()))
       hoverTimer.start();
     else
       hoverTimer.stop();

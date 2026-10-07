@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QMenu>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QScreen>
 #include <QTemporaryDir>
@@ -191,8 +192,8 @@ int main(int argc, char **argv) {
             "hidden trigger must be narrower and four pixels thick");
     require(panel.mask() == visibleTrigger,
             "only visible trigger pixels must receive input when hidden");
-    auto enterAt = [&](QPoint point) {
-      QEnterEvent enter(point, point, panel.mapToGlobal(point));
+    auto enterAt = [&](QPointF point) {
+      QEnterEvent enter(point, point, panel.mapToGlobal(point.toPoint()));
       QCoreApplication::sendEvent(&panel, &enter);
     };
     QPoint outside(panel.width() / 2 + 100, 1);
@@ -211,6 +212,37 @@ int main(int argc, char **argv) {
     QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, trigger);
     require(panel.isRevealed(), "click on the visible trigger must reveal");
     panel.setRevealed(false, false);
+
+    QRect triggerBounds = visibleTrigger.boundingRect();
+    QPointF triggerCenter(trigger);
+    for (const auto &edge : QList<QPair<QPointF, bool>>{
+             {{triggerCenter.x(), triggerBounds.bottom() + .75}, true},
+             {{triggerBounds.right() + .75, triggerCenter.y()}, true},
+             {{triggerBounds.left() - .25, triggerCenter.y()}, false},
+             {{triggerCenter.x(), triggerBounds.top() - .25}, false},
+             {{triggerBounds.right() + 1.0, triggerCenter.y()}, false},
+             {{triggerCenter.x(), triggerBounds.bottom() + 1.0}, false}}) {
+      enterAt(edge.first);
+      QTest::qWait(150);
+      require(panel.isRevealed() == edge.second,
+              "fractional hover must match the visible trigger boundary");
+      panel.setRevealed(false, false);
+      QMouseEvent press(QEvent::MouseButtonPress, edge.first, edge.first,
+                        panel.mapToGlobal(edge.first.toPoint()), Qt::LeftButton,
+                        Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &press);
+      require(panel.isRevealed() == edge.second,
+              "fractional click must match the visible trigger boundary");
+      panel.setRevealed(false, false);
+      QMouseEvent move(QEvent::MouseMove, edge.first, edge.first,
+                       panel.mapToGlobal(edge.first.toPoint()), Qt::NoButton,
+                       Qt::NoButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &move);
+      QTest::qWait(150);
+      require(panel.isRevealed() == edge.second,
+              "fractional movement must match the visible trigger boundary");
+      panel.setRevealed(false, false);
+    }
 
     bool handlerActive = false, destroyedDuringInteraction = false;
     QPointer<Panel> retiring =
