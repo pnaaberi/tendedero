@@ -1,6 +1,6 @@
 # Pegline Linux verification
 
-Last verified: **2026-10-07**. Application source: `fe9eed6`.
+Last verified: **2026-10-07**. Application source: `98c2b8c`.
 This record covers the Rust/Qt port and the shipped region-capture, screenshot
 flight, ten-second reveal, visible-trigger, thumbnail-recovery, and spring-motion updates.
 It records completed checks, not a promise of support for every desktop
@@ -34,6 +34,17 @@ configuration.
   ticks. They passed at normal and 1.75 scaling, including AddressSanitizer and
   UndefinedBehaviorSanitizer with leak detection excluded. The hidden input
   region returns to the marker.
+- Real paint counts verify the faster cadence during a swing, a lower rate
+  after settling, and no animation redraws while hidden. The active-cadence
+  check failed before the pacing update and passed afterward. The target is
+  roughly 60 updates per second during pulses and 25 for the quiet breeze;
+  this offscreen check does not establish compositor frame delivery. Timing
+  assertions use an otherwise idle workload; at least three frames are sampled
+  after delayed input, with sampling diagnostics emitted on failure.
+- Retuning regressions verify that copying late in a swing retains its input
+  pose and that visible screenshot edges copy the correct image on crowded
+  eight-card lines. They cover two widths, both swing directions, and fractional
+  pointer coordinates. Both failures were reproduced before their fixes.
 - Arrival checks inspect rendered frames to establish upward travel, preview
   click-through, landing, restored card input, the full ten-second timer,
   pointer-leave behavior, repeated-capture reset, manual hide, and retained
@@ -114,6 +125,11 @@ from a double-click, and instrumented checks exposed differing poses between
 painting and input. Regression checks failed before the fixes and passed
 afterward. Rapid clicks preserve the active pulse, and geometry shares one
 sampled animation time, including the retrigger guard after delayed input.
+
+The smoother-motion review exposed a later swing still moving after the
+double-click interval, and overlapping hit padding selecting the neighboring
+image. The active pulse now runs through settling, and visible rounded card
+bodies and pegs take priority in paint order before padded targets.
 
 ## Supported limits
 
