@@ -64,8 +64,9 @@ bash linux/scripts/check-ui.sh
 
 The native suite covers rendering, matching the hidden trigger's visible pixels
 to its input region, fractional pointer boundaries, full image clipboard data,
-cancelled drag ownership, file-retaining dismissal, retirement during a nested
-menu, flight trajectory and landing, the full ten-second preview, timer reset,
+cancelled drag ownership, file-retaining dismissal, menu visibility and safe
+retirement, size-based thumbnail refresh, failed-read retries, flight trajectory
+and landing, the full ten-second preview, timer reset,
 early hide, and quiet restoration of historical images. The arrival check
 takes about thirteen seconds because it exercises real timers.
 
@@ -123,6 +124,11 @@ desktop interactions. The C ABI pairs returned strings with
 the watch folder; a file must remain unchanged across two samples and decode
 successfully before it is added. First-scan fingerprints distinguish startup
 imports from captures made while the app runs.
+
+JSON snapshots carry modification time and file size as strings to preserve
+their integer values. Qt uses both for thumbnail identity. Incomplete thumbnail
+reads are retried on later snapshots; retrying the initial panel snapshot keeps
+restoration quiet, while a new live capture still starts its arrival effect.
 
 Each screen shares the same card list. A 32-by-4 logical-pixel marker at the
 top center supplies both the painted trigger and the hidden panel's entire

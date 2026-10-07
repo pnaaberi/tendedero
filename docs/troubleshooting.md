@@ -20,7 +20,7 @@ When the app is running, `--status` reports:
 | --- | --- |
 | `platform` | `wayland` for the supported desktop session |
 | `watch` | The screenshot directory actually being monitored |
-| `items` | Retained cards with file paths and modification fingerprints |
+| `items` | Retained cards with file paths, `modified` timestamps, `size` in bytes, and `new` capture flags |
 | `visible` | Whether the line is revealed on any screen |
 | `capturing` | Whether a Pegline-launched Spectacle capture is in progress |
 | `surfaces` | Per-screen size, reveal state, and `flying` animation state |

@@ -1,10 +1,11 @@
 # Pegline Linux verification
 
 Last verified: **2026-10-07**. Application source:
-[`0487cbd`](https://github.com/pnaaberi/tendedero/commit/0487cbd61b2ed2b1222263fea3eda8afd1d7fcd2).
+[`d7312c5`](https://github.com/pnaaberi/tendedero/commit/d7312c5b71ffae9c6f7607e6c769fd9ca86b4aff).
 This record covers the Rust/Qt port and the shipped region-capture, screenshot
-flight, ten-second reveal, and visible-trigger updates. It records completed
-checks, not a promise of support for every desktop configuration.
+flight, ten-second reveal, visible-trigger, and thumbnail-recovery updates.
+It records completed checks, not a promise of support for every desktop
+configuration.
 
 [User guide](../../README.md) · [Troubleshooting](../troubleshooting.md) ·
 [Build and checks](../development.md)
@@ -20,6 +21,11 @@ checks, not a promise of support for every desktop configuration.
 - Native checks cover rendered cards, input regions, image clipboard data,
   cancelled drag ownership, file-retaining dismissal, and safe retirement
   during nested menu handlers.
+- Cache regressions verify thumbnail refresh when size changes but timestamps
+  are preserved, retries after temporary read failure, quiet initial recovery,
+  and arrival of a live capture after its thumbnail becomes readable.
+- The manual reveal remains open during a card menu and hides when the pointer
+  leaves after closing it. Native smoke passes at normal and 1.75 scaling.
 - The hidden trigger's painted pixels match its entire input region: 32 by
   4 logical pixels. Outside hover and click do not reveal it. Fractional edge
   checks exercise hover, movement, and press at normal and 1.75 scaling.
@@ -32,6 +38,10 @@ checks, not a promise of support for every desktop configuration.
   also passed during port installation.
 - An isolated full-executable check verified that cold-start and offline
   images restore quietly while a new live image reveals the line.
+- An isolated session verified that file-size changes with identical nanosecond
+  modification times reach Qt, alongside single-instance controls and CLI
+  error exit codes. AddressSanitizer and UndefinedBehaviorSanitizer checks
+  passed for native smoke and arrival; leak detection was excluded.
 
 ## Live KDE evidence
 
@@ -42,6 +52,8 @@ connected displays with mixed scaling.
 - On both displays, hovering or clicking the visible trigger revealed the
   line. Hover beside it kept the line hidden; clicks beside it reached an
   underlying synthetic window. Hover at the fractional bottom edge passed.
+- Actual card menus on both displays kept the manually revealed line open
+  while the pointer moved outside. Closing the menu restored normal hiding.
 - Actual Meta+Shift+S input launched region selection. Selecting and releasing
   produced a real PNG of a synthetic test window.
 - The preview travelled into the line on both displays, landed, and released
@@ -80,6 +92,12 @@ The trigger review found rounded pointer coordinates rejecting part of its
 visible bottom and right edges. Shared pixel containment and fractional-event
 regressions corrected that finding; follow-up review found no further issues.
 
+A later bug hunt reproduced premature hiding under manual card menus and
+stale thumbnails after same-timestamp size changes. Review also reproduced a
+thumbnail disappearing permanently after a transient read failure. Regression
+cases failed before the fixes and passed afterward; cached snapshots now
+distinguish complete decodes and retain the initial restoration baseline.
+
 ## Supported limits
 
 - KDE Wayland is the verified target. Other compositors, X11, multiple seats,
@@ -92,6 +110,8 @@ regressions corrected that finding; follow-up review found no further issues.
   redirect Spectacle's save location.
 - Background Wayland clipboard access requires `ext-data-control-v1`.
   Native system libraries are dynamically linked and are not bundled here.
+- File changes are detected through modification time and size; replacing
+  content while preserving both values does not invalidate the cache.
 
 ## Publication and privacy
 

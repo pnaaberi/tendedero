@@ -94,7 +94,8 @@ transparent top edge passes clicks through to the app underneath.
 Captures made while Pegline is running open the line automatically. Images
 already on disk restore quietly at startup. A new capture resets the ten-second
 timer; an active card press, drag, or menu delays hiding until the interaction
-can finish. A line revealed manually hides shortly after the pointer leaves.
+can finish. A line revealed manually hides shortly after the pointer leaves;
+an open card menu postpones this hiding.
 Connected screens share the same recent cards.
 
 Pegline watches Spectacle's configured image-save folder. It accepts PNG, JPEG,
