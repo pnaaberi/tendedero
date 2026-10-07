@@ -34,11 +34,11 @@
 
 **Interfaces:** `Store::open(watch: PathBuf, state: PathBuf) -> io::Result<Store>`, `Store::scan() -> io::Result<bool>`, `Store::dismiss(path: &Path) -> io::Result<()>`, `Store::save_copy(path: &Path, destination: &Path) -> io::Result<PathBuf>`, and a serializable snapshot with `watch`, `items`, and `error` fields. Each item has `path` and `modified` fields. Keep settings discovery in this module.
 
-- [ ] Write failing tests using real temporary files: incomplete/stable discovery, filtering video/hidden/symlink files, eight-item eviction, dismissal persistence, pruning, Spectacle file-URL decoding with spaces, corrupt-state preservation, and destination collisions.
-- [ ] Run the tests and observe their failures before implementing the behavior.
-- [ ] Implement metadata sampling, extension filtering, bounded history, dismissed fingerprints, atomic state save, and exclusive destination creation.
-- [ ] Run `cargo test --manifest-path linux/Cargo.toml`; all tests pass.
-- [ ] Commit the tested Rust state implementation.
+- [x] Write failing tests using real temporary files: incomplete/stable discovery, filtering video/hidden/symlink files, eight-item eviction, dismissal persistence, pruning, Spectacle file-URL decoding with spaces, corrupt-state preservation, and destination collisions.
+- [x] Run the tests and observe their failures before implementing the behavior.
+- [x] Implement metadata sampling, extension filtering, bounded history, dismissed fingerprints, atomic state save, and exclusive destination creation.
+- [x] Run `cargo test --manifest-path linux/Cargo.toml`; all tests pass.
+- [x] Commit the tested Rust state implementation.
 
 ## Task 2: Native Qt interface and Rust executable
 
@@ -46,12 +46,12 @@
 
 **Interfaces:** C ABI `pg_snapshot() -> *mut c_char`, `pg_action(operation: *const c_char, path: *const c_char) -> *mut c_char`, `pg_string_free(value: *mut c_char)`, and `pg_run(argc: c_int, argv: *mut *mut c_char) -> c_int`. Qt owns widgets; Rust owns returned strings until the matching free. A session D-Bus service `org.choppy.Pegline` exposes controls under `/Pegline`.
 
-- [ ] Write failing native smoke checks for reveal/hide, card click producing image and URI clipboard MIME, dismissal retaining its file, and a render containing a card. Include cancelled drag ownership coverage.
-- [ ] Implement the C ABI and a Cargo build script invoking CMake for Qt native compilation.
-- [ ] Implement one top-anchored layer surface per monitor, an input mask limited to cards and a top-center sensor, animated reveal, card painting, gestures, clipboard, file drag/drop, menus, tray, KDE shortcut, and Spectacle actions.
-- [ ] Add D-Bus single-instance controls and CLI flags from the spec. Report action failures through feedback and stderr.
-- [ ] Run Rust tests and native smoke checks, then `cargo fmt --manifest-path linux/Cargo.toml --check`, `cargo clippy --manifest-path linux/Cargo.toml --all-targets -- -D warnings`, and `cargo build --manifest-path linux/Cargo.toml --release`; all pass.
-- [ ] Commit the working interface and executable.
+- [x] Write failing native smoke checks for reveal/hide, card click producing image and URI clipboard MIME, dismissal retaining its file, and a render containing a card. Include cancelled drag ownership coverage.
+- [x] Implement the C ABI and a Cargo build script invoking CMake for Qt native compilation.
+- [x] Implement one top-anchored layer surface per monitor, an input mask limited to cards and a top-center sensor, animated reveal, card painting, gestures, clipboard, file drag/drop, menus, tray, KDE shortcut, and Spectacle actions.
+- [x] Add D-Bus single-instance controls and CLI flags from the spec. Report action failures through feedback and stderr.
+- [x] Run Rust tests and native smoke checks, then `cargo fmt --manifest-path linux/Cargo.toml --check`, `cargo clippy --manifest-path linux/Cargo.toml --all-targets -- -D warnings`, and `cargo build --manifest-path linux/Cargo.toml --release`; all pass.
+- [x] Commit the working interface and executable.
 
 ## Task 3: Install, validate on KDE, publish fork
 
@@ -59,11 +59,11 @@
 
 **Interfaces:** Installed command `~/.local/bin/pegline`; desktop entry `org.choppy.Pegline.desktop`; systemd user service `pegline.service`, tied to the graphical session.
 
-- [ ] Add the independent icon, desktop entry, user service, and rootless installation script. Set no Spectacle settings and replace no existing screenshot shortcuts.
-- [ ] Rewrite the README for Pegline Linux, preserving upstream attribution and distinguishing supported Linux behavior from macOS features.
-- [ ] Validate the desktop entry with `desktop-file-validate` and service with `systemd-analyze --user verify`.
-- [ ] Install and start it. Check the running process, tray registration, shortcut registration, D-Bus status, and hover sensor geometry on the real KDE Wayland session.
-- [ ] Create a temporary image in the watched folder, wait for ingestion, copy it through the app and verify clipboard image MIME, restart and verify persistence, then remove the fixture. Capture and inspect the revealed line.
-- [ ] Perform one whole-branch code review using superpowers:requesting-code-review, fixing material findings and rerunning relevant checks.
+- [x] Add the independent icon, desktop entry, user service, and rootless installation script. Set no Spectacle settings and replace no existing screenshot shortcuts.
+- [x] Rewrite the README for Pegline Linux, preserving upstream attribution and distinguishing supported Linux behavior from macOS features.
+- [x] Validate the desktop entry with `desktop-file-validate` and service with `systemd-analyze --user verify`.
+- [x] Install and start it. Check the running process, tray registration, shortcut registration, D-Bus status, and hover sensor geometry on the real KDE Wayland session.
+- [x] Create a temporary image in the watched folder, wait for ingestion, copy it through the app and verify clipboard image MIME, restart and verify persistence, then remove the fixture. Capture and inspect the revealed line.
+- [x] Perform one whole-branch code review using superpowers:requesting-code-review, fixing material findings and rerunning relevant checks.
 - [ ] Create or reuse `pnaaberi/tendedero`, publish the port on `linux-pegline`, and verify remote commit and fork metadata. Keep the upstream source history.
 - [ ] Record the final verification evidence and give the user the fork link, installed command, and practical usage instructions.

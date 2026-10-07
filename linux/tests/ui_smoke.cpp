@@ -3,7 +3,9 @@
 #include <QClipboard>
 #include <QFile>
 #include <QJsonObject>
+#include <QMenu>
 #include <QMimeData>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QTest>
 #include <iostream>
@@ -13,6 +15,22 @@ static void require(bool condition, const char *message) {
   if (!condition)
     throw std::runtime_error(message);
 }
+
+class TrackedPanel : public Panel {
+public:
+  TrackedPanel(QScreen *screen, bool &active) : Panel(screen), active(active) {}
+
+protected:
+  void mousePressEvent(QMouseEvent *event) override {
+    bool *tracking = &active;
+    *tracking = true;
+    Panel::mousePressEvent(event);
+    *tracking = false;
+  }
+
+private:
+  bool &active;
+};
 
 int main(int argc, char **argv) {
   QApplication app(argc, argv);
@@ -24,6 +42,18 @@ int main(int argc, char **argv) {
     require(fixture.save(path), "create real PNG fixture");
     Panel panel(app.primaryScreen());
     panel.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+    if (app.arguments().contains("--clipboard-failure")) {
+      require(app.platformName() == "wayland",
+              "failure check must use real Wayland");
+      qputenv("WAYLAND_DISPLAY", "pegline-deliberately-unavailable");
+      QString error;
+      panel.onError = [&](QString message) { error = message; };
+      require(!panel.action("copy", path),
+              "unavailable native clipboard must not report success");
+      require(!error.isEmpty(), "clipboard failure must explain the error");
+      std::cout << "Wayland clipboard failure check passed.\n";
+      return 0;
+    }
     panel.show();
     panel.setRevealed(true, false);
     app.processEvents();
@@ -55,8 +85,34 @@ int main(int argc, char **argv) {
             "hidden card must not intercept clicks");
     require(panel.mask().contains(QPoint(panel.width() / 2, 1)),
             "hidden line must keep its hover sensor");
+
+    bool handlerActive = false, destroyedDuringInteraction = false;
+    QPointer<Panel> retiring =
+        new TrackedPanel(app.primaryScreen(), handlerActive);
+    retiring->setItems(
+        QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+    retiring->show();
+    retiring->setRevealed(true, false);
+    QObject::connect(retiring, &QObject::destroyed, &app,
+                     [&] { destroyedDuringInteraction = handlerActive; });
+    QTimer::singleShot(10, &app, [&] {
+      if (retiring)
+        retiring->retire();
+    });
+    QTimer::singleShot(20, &app, [] {
+      for (QWidget *widget : QApplication::topLevelWidgets())
+        if (auto menu = qobject_cast<QMenu *>(widget))
+          menu->close();
+    });
+    QTest::mousePress(retiring, Qt::RightButton, Qt::NoModifier,
+                      retiring->cardRect(0).center());
+    require(!destroyedDuringInteraction,
+            "panel must outlive its nested context-menu interaction");
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(retiring.isNull(),
+            "retired panel must be released after interaction returns");
     std::cout << "Native UI smoke passed: reveal, click-through, rendering, "
-                 "image clipboard, cancelled drag, dismissal, hide.\n";
+                 "image clipboard, cancelled drag, dismissal, hide, menu retirement.\n";
     return 0;
   } catch (const std::exception &e) {
     std::cerr << "Native UI smoke FAILED: " << e.what() << '\n';

@@ -23,16 +23,18 @@ pub struct Store {
     pub watch: PathBuf,
     pub items: Vec<PathBuf>,
     pub error: Option<String>,
+    pub warning: Option<String>,
     state: PathBuf,
     known: BTreeMap<PathBuf, Fingerprint>,
     samples: BTreeMap<PathBuf, Fingerprint>,
+    rejected: BTreeMap<PathBuf, (Fingerprint, u8)>,
     dirty: bool,
 }
 impl Store {
     pub fn open(watch: PathBuf, state: PathBuf) -> io::Result<Self> {
         fs::create_dir_all(&watch)?;
         let watch = fs::canonicalize(watch)?;
-        let mut error = None;
+        let mut warning = None;
         let mut saved = match fs::read(&state) {
             Ok(bytes) => match serde_json::from_slice::<Saved>(&bytes) {
                 Ok(saved) => saved,
@@ -43,7 +45,7 @@ impl Store {
                         .as_nanos();
                     let backup = state.with_file_name(format!("state.corrupt-{stamp}.json"));
                     fs::rename(&state, &backup)?;
-                    error = Some(format!(
+                    warning = Some(format!(
                         "Invalid state preserved at {}: {e}",
                         backup.display()
                     ));
@@ -69,13 +71,27 @@ impl Store {
             state,
             known: saved.known,
             samples: BTreeMap::new(),
-            error,
+            rejected: BTreeMap::new(),
+            error: None,
+            warning,
             dirty: false,
         })
     }
 
     /// Decode only changed, stable files. A failed decode remains eligible for retry.
     pub fn scan(&mut self, valid: impl Fn(&Path) -> bool) -> io::Result<bool> {
+        self.error = None;
+        let result = self.scan_files(valid);
+        if let Err(e) = &result {
+            self.error = Some(format!(
+                "Cannot refresh screenshots in {}: {e}",
+                self.watch.display()
+            ));
+        }
+        result
+    }
+
+    fn scan_files(&mut self, valid: impl Fn(&Path) -> bool) -> io::Result<bool> {
         let mut current = BTreeMap::new();
         for entry in fs::read_dir(&self.watch)? {
             let path = entry?.path();
@@ -108,6 +124,8 @@ impl Store {
         let before_known = self.known.clone();
         self.items.retain(|path| current.contains_key(path));
         self.known.retain(|path, _| current.contains_key(path));
+        self.rejected
+            .retain(|path, (stamp, _)| current.get(path) == Some(stamp));
         let mut arrivals: Vec<_> = current
             .iter()
             .filter(|(path, stamp)| {
@@ -117,8 +135,14 @@ impl Store {
         arrivals.sort_by_key(|(path, stamp)| (stamp.modified, *path));
         for (path, stamp) in arrivals {
             if !valid(path) {
+                let (_, attempts) = self.rejected.entry(path.clone()).or_insert((*stamp, 0));
+                *attempts = attempts.saturating_add(1);
+                if *attempts >= 3 && self.error.is_none() {
+                    self.error = Some(format!("Cannot decode image: {}", path.display()));
+                }
                 continue;
             }
+            self.rejected.remove(path);
             self.items.retain(|item| item != path);
             self.items.push(path.clone());
             self.known.insert(path.clone(), *stamp);
@@ -444,6 +468,10 @@ mod tests {
         s.scan(|_| true).unwrap();
         s.scan(|_| true).unwrap();
         assert_eq!(s.items.len(), 1);
+        assert!(
+            s.warning.is_some(),
+            "state recovery notice must survive a successful scan"
+        );
         assert!(fs::read_dir(&f.0).unwrap().any(|entry| {
             entry
                 .unwrap()
@@ -462,5 +490,44 @@ mod tests {
             ),
             PathBuf::from("/home/example/%€ Screenshots")
         );
+    }
+
+    #[test]
+    fn transient_scan_error_clears_when_folder_returns() {
+        let f = Fixture::new();
+        let mut s = f.store();
+        fs::rename(f.0.join("shots"), f.0.join("unavailable")).unwrap();
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.error.is_some(), "failed scan must report its error");
+        fs::rename(f.0.join("unavailable"), f.0.join("shots")).unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(
+            s.error.is_none(),
+            "recovered folder must not stay in error state"
+        );
+    }
+
+    #[test]
+    fn repeatedly_rejected_image_reports_error_and_can_recover() {
+        let f = Fixture::new();
+        let path = f.image("broken.png");
+        let mut s = f.store();
+        s.scan(|_| false).unwrap();
+        s.scan(|_| false).unwrap();
+        assert!(
+            s.error.is_none(),
+            "brief incomplete writes should not notify"
+        );
+        s.scan(|_| false).unwrap();
+        s.scan(|_| false).unwrap();
+        assert!(
+            s.error
+                .as_ref()
+                .is_some_and(|error| error.contains("broken.png")),
+            "rejected image needs an explanation"
+        );
+        s.scan(|_| true).unwrap();
+        assert!(s.error.is_none());
+        assert_eq!(s.items, vec![path]);
     }
 }

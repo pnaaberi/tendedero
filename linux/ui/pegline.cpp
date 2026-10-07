@@ -69,6 +69,7 @@ public:
   QMenu menu;
   QTimer scanTimer;
   QString lastError;
+  QString lastWarning;
   QAction shortcut;
 
   Desktop() : shortcut("Show or hide Pegline", this) {
@@ -117,8 +118,8 @@ public:
     QObject::connect(qApp, &QGuiApplication::screenRemoved, this,
                      [this](QScreen *screen) {
                        for (auto panel : panels)
-                         if (panel && panel->screen() == screen)
-                           panel->deleteLater();
+                         if (panel && panel->screenName() == screen->name())
+                           panel->retire();
                      });
     scanTimer.setInterval(500);
     QObject::connect(&scanTimer, &QTimer::timeout, this, [this] { refresh(); });
@@ -145,8 +146,12 @@ public:
     QString error = state["error"].toString();
     if (!error.isEmpty() && error != lastError) {
       report(error);
-      lastError = error;
     }
+    lastError = error;
+    QString warning = state["warning"].toString();
+    if (!warning.isEmpty() && warning != lastWarning)
+      report(warning);
+    lastWarning = warning;
   }
 
   void report(const QString &message) {
@@ -210,7 +215,7 @@ public:
       for (auto panel : panels)
         if (panel) {
           visible |= panel->isRevealed();
-          surfaces.append(QJsonObject{{"screen", panel->screen()->name()},
+          surfaces.append(QJsonObject{{"screen", panel->screenName()},
                                       {"width", panel->width()},
                                       {"height", panel->height()},
                                       {"revealed", panel->isRevealed()}});

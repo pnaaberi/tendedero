@@ -34,7 +34,7 @@ def wait_for(predicate):
 def png(width, height, color):
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-    rows = (b"\0" + bytes(color) * width) * height
+    rows = (b"\0" + bytes(color) * width) * height if color else b"".join(b"\0" + os.urandom(width * 3) for _ in range(height))
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
 
 
@@ -53,7 +53,7 @@ def main():
     saved = None
     evidence = Path(tempfile.mkdtemp(prefix="pegline-live-"))
     try:
-        for n, (size, color) in enumerate([((480, 300), (70, 123, 180)), ((280, 400), (104, 165, 128)), ((600, 250), (190, 139, 88))]):
+        for n, (size, color) in enumerate([((480, 300), None), ((280, 400), (104, 165, 128)), ((600, 250), (190, 139, 88))]):
             path = watched / f"pegline-check-{os.getpid()}-{n}.png"
             path.write_bytes(png(*size, color))
             fixtures.append(path)
@@ -64,6 +64,7 @@ def main():
         assert str(fixtures[0]).replace(" ", "%20") in run("wl-paste", "--type", "text/uri-list")
         clipboard = subprocess.check_output(["wl-paste", "--type", "image/png"])
         assert struct.unpack(">II", clipboard[16:24]) == (480, 300), "clipboard must contain full-size image"
+        assert len(clipboard) > 65536 and clipboard.endswith(b"\0\0\0\0IEND\xaeB`\x82"), "large clipboard transfers must finish without truncation"
         result = action("save", fixtures[0])
         assert result["ok"], result
         saved = Path(result["saved"])

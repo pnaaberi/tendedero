@@ -12,11 +12,13 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPointer>
 #include <QScreen>
 #include <QUrl>
 #include <cmath>
 
 Panel::Panel(QScreen *output) {
+  assignedScreenName = output->name();
   setScreen(output);
   setTitle("Pegline");
   setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus);
@@ -74,7 +76,7 @@ Panel::Panel(QScreen *output) {
 }
 
 void Panel::setItems(const QJsonArray &items) {
-  if (items == lastItems || dragging)
+  if (retiring || items == lastItems || dragging)
     return;
   QList<Card> next;
   for (const auto &value : items) {
@@ -104,6 +106,8 @@ void Panel::setItems(const QJsonArray &items) {
 }
 
 void Panel::setRevealed(bool value, bool animate) {
+  if (retiring)
+    return;
   hideTimer.stop();
   hoverTimer.stop();
   revealed = value;
@@ -127,6 +131,23 @@ void Panel::setRevealed(bool value, bool animate) {
 }
 
 bool Panel::isRevealed() const { return revealed; }
+void Panel::retire() {
+  if (retiring)
+    return;
+  retiring = true;
+  hide();
+  hideTimer.stop();
+  hoverTimer.stop();
+  holdTimer.stop();
+  breezeTimer.stop();
+  slide.stop();
+  if (currentMenu)
+    currentMenu->close();
+  if (dragging)
+    QDrag::cancel();
+  if (!currentMenu && !dragging)
+    deleteLater();
+}
 QRect Panel::sensor() const { return QRect((width() - 360) / 2, 0, 360, 3); }
 
 QRect Panel::cardRect(int index) const {
@@ -258,6 +279,8 @@ void Panel::resizeEvent(QResizeEvent *event) {
 }
 
 bool Panel::action(const QString &operation, const QString &path) {
+  if (retiring)
+    return false;
   auto card = std::find_if(cards.begin(), cards.end(),
                            [&](const Card &item) { return item.path == path; });
   if (card == cards.end())
@@ -279,12 +302,20 @@ bool Panel::action(const QString &operation, const QString &path) {
         onError("Cannot encode screenshot for clipboard");
       return false;
     }
-    auto mime = new QMimeData;
-    mime->setImageData(image);
-    mime->setData("image/png", png);
-    mime->setUrls({QUrl::fromLocalFile(path)});
-    QApplication::clipboard()->setMimeData(mime);
-    setNativeClipboard(png, QUrl::fromLocalFile(path).toEncoded() + "\r\n");
+    if (QApplication::platformName() == "wayland") {
+      if (!setNativeClipboard(png,
+                              QUrl::fromLocalFile(path).toEncoded() + "\r\n")) {
+        if (onError)
+          onError("Could not copy screenshot to the Wayland clipboard");
+        return false;
+      }
+    } else {
+      auto mime = new QMimeData;
+      mime->setImageData(image);
+      mime->setData("image/png", png);
+      mime->setUrls({QUrl::fromLocalFile(path)});
+      QApplication::clipboard()->setMimeData(mime);
+    }
     copied = path;
     copiedUntil = clock.elapsed() + 1400;
     update();
@@ -314,8 +345,16 @@ void Panel::mousePressEvent(QMouseEvent *event) {
       QObject::connect(item, &QAction::triggered, this,
                        [this, entry, path] { action(entry.second, path); });
     }
+    QPointer<Panel> guard(this);
+    currentMenu = &menu;
     menu.exec(event->globalPosition().toPoint());
-    hideTimer.start();
+    if (!guard)
+      return;
+    currentMenu = nullptr;
+    if (retiring)
+      deleteLater();
+    else
+      hideTimer.start();
     return;
   }
   if (event->button() != Qt::LeftButton)
@@ -373,15 +412,25 @@ void Panel::mouseMoveEvent(QMouseEvent *event) {
     drag->setPixmap(QPixmap::fromImage(card->image));
     drag->setHotSpot(QPoint(card->image.width() / 2, card->image.height() / 2));
   }
+  QPointer<Panel> guard(this);
+  QPointer<QDrag> dragGuard(drag);
   drag->exec(Qt::CopyAction | Qt::MoveAction, Qt::CopyAction);
+  if (!guard)
+    return;
   // Never delete a source based on the reported action: file managers own
   // moves.
-  drag->deleteLater();
+  if (dragGuard)
+    dragGuard->deleteLater();
   dragging = false;
-  hideTimer.start();
+  if (retiring)
+    deleteLater();
+  else
+    hideTimer.start();
 }
 
 bool Panel::event(QEvent *event) {
+  if (retiring)
+    return QRasterWindow::event(event);
   if (event->type() == QEvent::Enter) {
     hideTimer.stop();
     if (!revealed)

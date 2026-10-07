@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QVariantAnimation>
 #include <functional>
+class QMenu;
 
 class Panel : public QRasterWindow {
 public:
@@ -19,6 +20,8 @@ public:
   std::function<void(QString, QString)> onAction;
   std::function<void(QString)> onError;
   bool isDragging() const { return dragging; }
+  void retire();
+  QString screenName() const { return assignedScreenName; }
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -40,6 +43,9 @@ private:
   QVariantAnimation slide;
   QElapsedTimer clock;
   bool revealed = false, dragging = false, held = false;
+  bool retiring = false;
+  QMenu *currentMenu = nullptr;
+  QString assignedScreenName;
   qreal progress = 0;
   QString pressed, copied;
   QPoint down;

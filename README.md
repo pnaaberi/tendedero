@@ -92,13 +92,17 @@ cargo clippy --manifest-path linux/Cargo.toml --all-targets -- -D warnings
 ```
 
 The test suite includes real filesystem tests and a native Qt smoke test for
-rendering, input regions, image clipboard content, and file retention. UI
+rendering, input regions, image clipboard content, file retention, scan-error
+recovery, and panel lifetime during a nested menu. UI
 checks run using Qt's offscreen platform. `bash linux/scripts/check-ui.sh`
 runs just the native checks. Check the live Wayland desktop as well before
 shipping compositor-related changes.
 
+On the live Wayland session, `QT_QPA_PLATFORM=wayland linux/target/ui-check/pegline-ui-smoke --clipboard-failure`
+also checks that an unavailable clipboard connection reports failure.
+
 On an installed KDE session, `python linux/scripts/check-live.py` verifies
-real screenshot ingestion, image and file-URL clipboard offers, safe copying,
+real screenshot ingestion, complete large PNG and file-URL clipboard transfers, safe copying,
 dismissal, service restart, and shortcut delivery. It requires `wl-clipboard`
 and room for three temporary cards; it removes its fixtures afterward and
 keeps desktop evidence in a private temporary folder. This check restarts

@@ -35,13 +35,14 @@ extern "C" fn pg_snapshot() -> *mut c_char {
             }
         }
         let store = slot.as_mut().unwrap();
-        if let Err(e) = store.scan(|path| {
+        let _ = store.scan(|path| {
             CString::new(path.to_string_lossy().as_bytes()).is_ok_and(|path| unsafe { pg_image_valid(path.as_ptr()) })
-        }) { store.error = Some(e.to_string()); }
+        });
         owned_json(json!({
             "watch": store.watch.to_string_lossy(),
             "items": store.items.iter().map(|path| json!({"path": path.to_string_lossy(), "modified": store.modified(path).to_string()})).collect::<Vec<_>>(),
             "error": store.error,
+            "warning": store.warning,
         }))
     })
 }
