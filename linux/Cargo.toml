@@ -1,0 +1,15 @@
+[package]
+name = "pegline"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A native screenshot clothesline for KDE Wayland"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+strip = true
+lto = "thin"
+
