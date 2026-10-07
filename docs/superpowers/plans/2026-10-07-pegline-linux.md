@@ -65,5 +65,5 @@
 - [x] Install and start it. Check the running process, tray registration, shortcut registration, D-Bus status, and hover sensor geometry on the real KDE Wayland session.
 - [x] Create a temporary image in the watched folder, wait for ingestion, copy it through the app and verify clipboard image MIME, restart and verify persistence, then remove the fixture. Capture and inspect the revealed line.
 - [x] Perform one whole-branch code review using superpowers:requesting-code-review, fixing material findings and rerunning relevant checks.
-- [ ] Create or reuse `pnaaberi/tendedero`, publish the port on `linux-pegline`, and verify remote commit and fork metadata. Keep the upstream source history.
-- [ ] Record the final verification evidence and give the user the fork link, installed command, and practical usage instructions.
+- [x] Create or reuse `pnaaberi/tendedero`, publish the port on `linux-pegline`, and verify remote commit and fork metadata. Keep the upstream source history.
+- [x] Record the final verification evidence and give the user the fork link, installed command, and practical usage instructions.

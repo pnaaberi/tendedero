@@ -61,3 +61,11 @@ remain deferred.
 The port uses the independent name **Pegline** and its own icon to respect
 the upstream project's restricted name/artwork. Original source history and
 MIT attribution remain in the fork.
+
+## Publication
+
+The fork is https://github.com/pnaaberi/tendedero, with `linux-pegline` as
+its default branch and `alejandrobujan/tendedero` retained as its parent.
+The published branch retains upstream commit history and contains the port,
+installation scripts, usage guide, and this verification record. Remote
+branch hashes were checked against the local commits after pushing.
