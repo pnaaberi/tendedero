@@ -76,7 +76,7 @@ You can always capture from Pegline's tray menu.
 | --- | --- |
 | Meta+Shift+S | Capture a region through Spectacle |
 | Meta+Alt+T or left-click the tray icon | Show or hide the line |
-| Hover at the top center of a screen | Reveal the line |
+| Hover or click the small green marker at a screen's top center | Reveal the line |
 | Click a card | Copy the full image and its file URL |
 | Double-click a card | Open in your default image viewer |
 | Hold a card for 450 ms | Open Spectacle's annotation editor |
@@ -87,6 +87,9 @@ You can always capture from Pegline's tray menu.
 The tray menu also offers **Capture current screen**, **Open screenshot
 folder**, and **Take all down (keep files)**. Saving a copy uses your configured
 Pictures folder and a unique filename; existing files are never overwritten.
+
+Only the visible marker opens the line with the pointer. The surrounding
+transparent top edge passes clicks through to the app underneath.
 
 Captures made while Pegline is running open the line automatically. Images
 already on disk restore quietly at startup. A new capture resets the ten-second

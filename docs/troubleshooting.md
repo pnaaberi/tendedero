@@ -27,8 +27,9 @@ When the app is running, `--status` reports:
 | `error`, `warning` | Watcher errors or preserved-state recovery notices |
 
 `--status` exits with code 3 if Pegline is not running. A hidden line with
-`visible: false` is normal: use the tray icon, Meta+Alt+T, or the top-center
-hover target to reveal it.
+`visible: false` is normal: use the tray icon, Meta+Alt+T, or hover or click the
+small green marker at a screen's top center to reveal it. Only the visible
+marker responds; the surrounding transparent edge passes clicks through.
 
 Status, history, and journal output can contain personal image paths. Redact
 them before opening a public issue; do not paste raw state files or desktop

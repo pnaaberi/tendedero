@@ -1,10 +1,10 @@
 # Pegline Linux verification
 
 Last verified: **2026-10-07**. Application source:
-[`56aec8d`](https://github.com/pnaaberi/tendedero/commit/56aec8d32e549ea70e13ed4b0cc6a4ff9735474f).
+[`0487cbd`](https://github.com/pnaaberi/tendedero/commit/0487cbd61b2ed2b1222263fea3eda8afd1d7fcd2).
 This record covers the Rust/Qt port and the shipped region-capture, screenshot
-flight, and ten-second reveal update. It records completed checks, not a
-promise of support for every desktop configuration.
+flight, ten-second reveal, and visible-trigger updates. It records completed
+checks, not a promise of support for every desktop configuration.
 
 [User guide](../../README.md) · [Troubleshooting](../troubleshooting.md) ·
 [Build and checks](../development.md)
@@ -20,6 +20,9 @@ promise of support for every desktop configuration.
 - Native checks cover rendered cards, input regions, image clipboard data,
   cancelled drag ownership, file-retaining dismissal, and safe retirement
   during nested menu handlers.
+- The hidden trigger's painted pixels match its entire input region: 32 by
+  4 logical pixels. Outside hover and click do not reveal it. Fractional edge
+  checks exercise hover, movement, and press at normal and 1.75 scaling.
 - Arrival checks inspect rendered frames to establish upward travel, preview
   click-through, landing, restored card input, the full ten-second timer,
   pointer-leave behavior, repeated-capture reset, manual hide, and retained
@@ -36,6 +39,9 @@ Verified on CachyOS with KDE Plasma Wayland, Rust 1.97.1, Qt 6.11.2,
 LayerShellQt 6.7.5, and Spectacle 6.7.5. Capture arrival was checked on two
 connected displays with mixed scaling.
 
+- On both displays, hovering or clicking the visible trigger revealed the
+  line. Hover beside it kept the line hidden; clicks beside it reached an
+  underlying synthetic window. Hover at the fractional bottom edge passed.
 - Actual Meta+Shift+S input launched region selection. Selecting and releasing
   produced a real PNG of a synthetic test window.
 - The preview travelled into the line on both displays, landed, and released
@@ -69,6 +75,10 @@ imports could masquerade as new captures. The watcher now carries a startup
 fingerprint baseline through the JSON snapshot; the UI animates only live
 arrivals. Regression checks failed before the corresponding fixes and passed
 afterward. The capture review's Markdown table issue was also corrected.
+
+The trigger review found rounded pointer coordinates rejecting part of its
+visible bottom and right edges. Shared pixel containment and fractional-event
+regressions corrected that finding; follow-up review found no further issues.
 
 ## Supported limits
 

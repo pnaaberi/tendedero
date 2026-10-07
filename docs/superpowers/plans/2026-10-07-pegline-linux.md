@@ -92,3 +92,14 @@ Completed follow-up to the initial port; covered by the updated spec.
   two displays with mixed scaling.
 - [x] Review the follow-up, fix startup restoration and table rendering, audit
   the complete cleaned history, and publish the tested capture update.
+
+## Task 5: Match the summon target to the visible marker
+
+- [x] Narrow the top-center marker to 32 logical pixels and thicken it to four.
+  Use the same rectangle for painting and the hidden input region.
+- [x] Limit pointer reveal to the visible marker, including fractional edge
+  positions. Ignore outside hover and pass outside clicks through.
+- [x] Verify rendered pixels, masks, and pointer events at normal and 1.75
+  scaling; check pointer routing on both live KDE Wayland displays.
+- [x] Resolve the fractional-coordinate review finding and update the user
+  guide, design, development checks, and verification record.

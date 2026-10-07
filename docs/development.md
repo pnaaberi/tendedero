@@ -62,7 +62,8 @@ checks:
 bash linux/scripts/check-ui.sh
 ```
 
-The native suite covers rendering, input regions, full image clipboard data,
+The native suite covers rendering, matching the hidden trigger's visible pixels
+to its input region, fractional pointer boundaries, full image clipboard data,
 cancelled drag ownership, file-retaining dismissal, retirement during a nested
 menu, flight trajectory and landing, the full ten-second preview, timer reset,
 early hide, and quiet restoration of historical images. The arrival check
@@ -100,6 +101,10 @@ check Meta+Shift+S, selection and cancellation, flight into the line, ten-second
 hide, repeated-capture reset, manual hide, and click-through on every connected
 display. Use a synthetic test window rather than personal desktop content.
 
+For trigger changes, check hover and click on the visible marker and along its
+edges on each display, including fractional scaling. Hover beside it must keep
+the line hidden, and clicks beside it must reach the underlying test window.
+
 ## Architecture
 
 | File | Responsibility |
@@ -119,8 +124,11 @@ the watch folder; a file must remain unchanged across two samples and decode
 successfully before it is added. First-scan fingerprints distinguish startup
 imports from captures made while the app runs.
 
-Each screen shares the same card list. During the 800 ms flight its panel
-temporarily expands to the screen height, while the moving preview passes
+Each screen shares the same card list. A 32-by-4 logical-pixel marker at the
+top center supplies both the painted trigger and the hidden panel's entire
+input region. Pointer checks preserve fractional positions at its boundaries.
+During the 800 ms flight its panel temporarily expands to the screen height,
+while the moving preview passes
 input through. After landing the panel shrinks to its normal height. The
 ten-second capture timer survives pointer leave and defers during active
 card interactions; hiding cancels the flight and timer.

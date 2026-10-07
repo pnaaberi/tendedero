@@ -38,7 +38,9 @@ the user's preferred Rust core. A web wrapper adds an unnecessary runtime.
   videos, hidden files, directories, symlinks, and incomplete image writes.
 - Show up to eight recent screenshots. Prune moved or deleted files. Keep
   state across restarts; dismissal or capacity eviction never deletes files.
-- A small hover target at the top center reveals the line. Leaving hides it
+- A visible 32-by-4 logical-pixel marker at the top center reveals the line
+  on hover or click. Only its visible area accepts input when hidden; the
+  surrounding transparent edge passes clicks through. Leaving hides it
   after a short delay for manual reveals. New captures reveal the line for ten
   seconds, reset that timer on another capture, and survive pointer leave.
   Active card presses, drags, and menus postpone automatic hiding. Manual hide
