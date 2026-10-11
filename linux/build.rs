@@ -25,6 +25,7 @@ fn main() {
         "Qt6Widgets",
         "Qt6Gui",
         "Qt6DBus",
+        "Qt6Network",
         "Qt6Core",
         "LayerShellQtInterface",
         "KF6GlobalAccel",

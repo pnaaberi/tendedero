@@ -1,4 +1,5 @@
 #include "panel.hpp"
+#include "fileshare.hpp"
 #include <KGlobalAccel>
 #include <QApplication>
 #include <QDBusConnection>
@@ -8,6 +9,11 @@
 #include <QDBusVirtualObject>
 #include <QDesktopServices>
 #include <QFileInfo>
+#include <QDir>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -73,6 +79,51 @@ public:
   QAction shortcut;
   QAction captureShortcut;
   bool capturing = false;
+  FileShare *fileShare = nullptr;
+
+  QString shareConfigPath() const {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/pegline/fileshare.ini";
+  }
+
+  void loadFileShare() {
+    QSettings settings(shareConfigPath(), QSettings::IniFormat);
+    auto previous = fileShare;
+    QString stateRoot = qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state");
+    fileShare = new FileShare(QUrl(settings.value("url").toString()), stateRoot + "/pegline/uploads.json", this);
+    fileShare->onChanged = [this] {
+      for (auto panel : panels)
+        if (panel) panel->refreshFileShare();
+    };
+    for (auto panel : panels)
+      if (panel) panel->setFileShare(fileShare);
+    if (previous) previous->deleteLater();
+  }
+
+  void configureFileShare() {
+    if (fileShare && fileShare->busy()) {
+      report("Finish or cancel uploads before changing FileShare.");
+      return;
+    }
+    bool accepted = false;
+    QString value = QInputDialog::getText(nullptr, "FileShare", "Private HTTPS address (leave empty to disable):",
+        QLineEdit::Normal, fileShare ? fileShare->endpoint().toString() : QString(), &accepted).trimmed();
+    if (!accepted) return;
+    QUrl url(value);
+    if (url.path() == "/upload.html") url.setPath("");
+    if (!value.isEmpty() && (!FileShare::validEndpoint(url) || url.scheme() != "https")) {
+      report("Use an HTTPS FileShare address, without a username, query or fragment.");
+      return;
+    }
+    QSettings settings(shareConfigPath(), QSettings::IniFormat);
+    settings.setValue("url", url.toString());
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+      report("Could not save FileShare settings.");
+      return;
+    }
+    QFile::setPermissions(shareConfigPath(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    loadFileShare();
+  }
 
   Desktop()
       : shortcut("Show or hide Pegline", this),
@@ -96,6 +147,7 @@ public:
       for (auto value : state["items"].toArray())
         perform("dismiss", value.toObject()["path"].toString());
     });
+    add("Configure FileShare…", [this] { configureFileShare(); });
     menu.addSeparator();
     add("Quit Pegline", [] { QApplication::quit(); });
     QObject::connect(&tray, &QSystemTrayIcon::activated, this,
@@ -124,6 +176,7 @@ public:
              "in KDE settings.");
     QObject::connect(&captureShortcut, &QAction::triggered, this,
                      [this] { capture("--region"); });
+    loadFileShare();
     refresh();
     for (QScreen *screen : QApplication::screens())
       addScreen(screen);
@@ -149,6 +202,8 @@ public:
       perform(operation, path);
     };
     panel->onError = [this](QString error) { report(error); };
+    panel->setFileShare(fileShare);
+    panel->setCaptureSuppressed(capturing);
     panel->show();
   }
 
@@ -178,12 +233,16 @@ public:
       return;
     capturing = true;
     control("Hide");
+    for (auto panel : panels)
+      if (panel) panel->setCaptureSuppressed(true);
     QTimer::singleShot(250, this, [this, mode] {
       auto process = new QProcess(this);
       QObject::connect(process, &QProcess::errorOccurred, this,
                        [this, process](QProcess::ProcessError error) {
                          if (error == QProcess::FailedToStart) {
                            capturing = false;
+                           for (auto panel : panels)
+                             if (panel) panel->setCaptureSuppressed(false);
                            report("Could not launch Spectacle: " +
                                   process->errorString());
                            process->deleteLater();
@@ -193,6 +252,8 @@ public:
           process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
           this, [this, process](int code, QProcess::ExitStatus status) {
             capturing = false;
+                       for (auto panel : panels)
+                         if (panel) panel->setCaptureSuppressed(false);
             if (status == QProcess::CrashExit || code != 0)
               report("Spectacle could not complete the capture");
             process->deleteLater();

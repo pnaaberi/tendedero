@@ -166,3 +166,24 @@ published branch history. GitHub can retain old commit objects, and existing
 clones or caches can retain prior content; a history rewrite does not erase
 those copies. Raw audit reports remain local. New public changes must follow
 the [publication checks](../development.md#changes-and-publication).
+# FileShare follow-up — 11 October 2026
+
+The optional persistent FileShare card is implemented and installed locally.
+Its endpoint is configured outside the repository. Verified the shared upload
+client, owner-only download route, hidden-shelf card/input region, capture
+suppression, cancellation, receipt validation and correct-file copy actions.
+
+- Rust store tests: 12 passed; native core, motion, arrival, FileShare card
+  and client checks passed. Formatting, Clippy and release build passed.
+- FileShare service: 16 upload tests and 13 existing server tests passed.
+- Real Tailnet endpoint: synthetic upload, exact downloaded bytes and SHA-256,
+  attachment/no-store headers, and link/path Wayland clipboard checks passed.
+- Actual compositor drag from a separate synthetic native window to the
+  installed card succeeded. Native Qt event checks ran on Wayland as well.
+- Reviewed the card's own render. Synthetic remote test files/receipts were
+  removed; normal source files were retained. Server rollback source and the
+  prior installed Pegline executable are retained privately.
+
+Physical file-manager variations, assistive technology and a live multi-screen
+hotplug during a transfer were not separately exercised. The existing shared
+controller owns the upload queue independently of screen-panel lifetime.

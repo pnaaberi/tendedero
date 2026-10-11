@@ -1,5 +1,6 @@
 #include "panel.hpp"
 #include "clipboard.hpp"
+#include "fileshare.hpp"
 #include <LayerShellQt/Window>
 #include <QApplication>
 #include <QBuffer>
@@ -217,7 +218,7 @@ void Panel::setRevealed(bool value, bool animate) {
   if (opening)
     for (const auto &card : cards)
       nudge(card.path, 9);
-  if (value)
+  if (value || (fileShare && fileShare->enabled() && !captureSuppressed))
     breezeTimer.start();
   else
     breezeTimer.stop();
@@ -302,9 +303,10 @@ QTransform Panel::cardTransform(int index) const {
 QRect Panel::cardRect(int index) const {
   if (index < 0 || index >= cards.size())
     return {};
+  qreal available = width() - (fileShare && fileShare->enabled() ? 206 : 0);
   qreal spacing =
-      std::min(174.0, (width() - 48.0) / std::max(1, int(cards.size())));
-  qreal x = width() / 2.0 + (index - (cards.size() - 1) / 2.0) * spacing;
+      std::min(174.0, (available - 48.0) / std::max(1, int(cards.size())));
+  qreal x = available / 2.0 + (index - (cards.size() - 1) / 2.0) * spacing;
   QSize size = cards[index].image.size().scaled(
       int(std::min(156.0, spacing - 18)), 112, Qt::KeepAspectRatio);
   qreal fraction = x / std::max(1, width());
@@ -341,6 +343,8 @@ int Panel::cardAt(QPointF point) const {
 
 void Panel::updateInput() {
   QRegion region(sensor());
+  if (!fileShareRect().isEmpty())
+    region |= QRegion(fileShareTransform().map(QPolygon(fileShareRect().adjusted(-4, -14, 4, 4))));
   if (progress > .01)
     for (int i = 0; i < cards.size(); ++i)
       if (cards[i].path != flightPath)
@@ -357,6 +361,7 @@ QImage Panel::renderFrame() const {
   QPainter painter(&frame);
   painter.setRenderHint(QPainter::Antialiasing);
   painter.fillRect(sensor(), QColor(119, 203, 171, 170));
+  paintFileShare(painter);
   if (progress < .01)
     return frame;
   painter.setOpacity(std::clamp(progress, qreal(0), qreal(1)));
@@ -622,6 +627,8 @@ void Panel::mouseMoveEvent(QMouseEvent *event) {
 bool Panel::event(QEvent *event) {
   if (retiring)
     return QRasterWindow::event(event);
+  if (fileShareEvent(event))
+    return true;
   if (event->type() == QEvent::Enter) {
     hideTimer.stop();
     if (!revealed &&

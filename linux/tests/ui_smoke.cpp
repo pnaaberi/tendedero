@@ -1,4 +1,7 @@
 #include "../ui/panel.hpp"
+#include "../ui/fileshare.hpp"
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QApplication>
 #include <QClipboard>
 #include <QEnterEvent>
@@ -57,6 +60,37 @@ int main(int argc, char **argv) {
     QImage fixture(120, 80, QImage::Format_ARGB32);
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
+    if (app.arguments().contains("--fileshare")) {
+      FileShare share(QUrl("https://example.invalid"), directory.filePath("receipts.json"));
+      Panel panel(app.primaryScreen());
+      panel.setFileShare(&share);
+      panel.show();
+      panel.setRevealed(false, false);
+      QRect card = panel.fileShareRect();
+      require(!card.isEmpty() && panel.mask().contains(card.center()), "utility card stays interactive when shelf hidden");
+      require(panel.renderFrame().pixelColor(card.center() * panel.devicePixelRatio()).alpha() > 0,
+              "utility card remains visible when hidden");
+      require(!panel.mask().contains(QPoint(10, 100)), "surrounding space remains click through");
+      panel.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+      panel.setRevealed(true, false);
+      require(!card.intersects(panel.cardRect(0)), "screenshots reserve the utility slot");
+      panel.setCaptureSuppressed(true);
+      require(!panel.mask().contains(card.center()), "capture suppression removes utility input");
+      require(panel.renderFrame().pixelColor(card.center() * panel.devicePixelRatio()).alpha() == 0,
+              "capture suppression hides utility pixels");
+      panel.setCaptureSuppressed(false);
+      QMimeData mime;
+      mime.setUrls({QUrl::fromLocalFile(path)});
+      QDragEnterEvent enter(card.center(), Qt::CopyAction | Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &enter);
+      require(enter.isAccepted() && enter.dropAction() == Qt::CopyAction, "drop target chooses Copy");
+      mime.setUrls({QUrl("https://example.invalid/file")});
+      QDragEnterEvent remote(card.center(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &remote);
+      require(!remote.isAccepted(), "remote URLs cannot be dropped");
+      std::cout << "FileShare card checks passed\n";
+      return 0;
+    }
     if (app.arguments().contains("--motion")) {
       PaintedPanel motion(app.primaryScreen());
       motion.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});

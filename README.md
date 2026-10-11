@@ -91,6 +91,36 @@ The tray menu also offers **Capture current screen**, **Open screenshot
 folder**, and **Take all down (keep files)**. Saving a copy uses your configured
 Pictures folder and a unique filename; existing files are never overwritten.
 
+### FileShare uploads
+
+Choose **Configure FileShare…** in the tray menu and enter your private
+FileShare HTTPS address. A small FileShare card stays hanging at the right of
+each screen, including while the screenshot shelf is hidden. Drop regular
+local files onto it to upload immediately, or use its menu to choose files.
+You can also drag a screenshot card onto FileShare. The utility card does not
+use one of the eight screenshot slots and hides during Pegline captures.
+
+Transfers run sequentially, with progress and **Cancel uploads** on the card.
+Files must contain 1 byte–4 GiB; directories, symlinks and remote URLs are
+rejected. Dropping copies file bytes and always retains the original. Cancelling
+or losing the connection after transmission starts leaves reception uncertain:
+check the upload page before retrying. A failure stops the remaining batch.
+
+After a confirmed upload, **Copy link** copies the private download URL and
+**Copy path** copies the exact path on the server for an agent running there.
+Older successful results remain in the card's menu, labelled by filename; ten
+recent receipts survive restart. Links require the FileShare owner's permitted
+Tailscale identity. Uploaded files remain untrusted and are retrieved as
+attachments, separately from FileShare's published catalogue.
+
+Settings live in `$XDG_CONFIG_HOME/pegline/fileshare.ini` (normally
+`~/.config/pegline/fileshare.ini`), with a `url` key under `[General]`. Private
+receipt history lives in `$XDG_STATE_HOME/pegline/uploads.json` (normally
+`~/.local/state/pegline/uploads.json`). Leave the address empty to disable the
+card. FileShare integration is off until configured; no server address is
+bundled. It requires FileShare's owner-gated upload API with `download_url` in
+the successful upload acknowledgement.
+
 Only the visible marker opens the line with the pointer. The surrounding
 transparent top edge passes clicks through to the app underneath.
 
@@ -159,8 +189,9 @@ bash linux/scripts/uninstall.sh
 Uninstalling removes the executable, service, desktop entry, and icon. It keeps
 screenshot files and saved history. Local history lives at
 `${XDG_STATE_HOME:-$HOME/.local/state}/pegline/state.json`; it contains image
-paths and file fingerprints, not image copies. Pegline uses no account,
-telemetry, or network requests at runtime.
+paths and file fingerprints, not image copies. Pegline uses no telemetry.
+When FileShare is configured, explicit file drops and file selections send
+HTTPS requests to that endpoint through your machine's Tailscale connection.
 
 ## Compatibility and attribution
 

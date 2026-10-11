@@ -9,7 +9,7 @@ The Linux app lives in `linux/`. The root Swift package and `scripts/` are the
 preserved macOS implementation and do not build the Linux app.
 
 Use a current stable Rust toolchain (Rust 1.97.1 was verified), a C++17 compiler,
-CMake 3.20 or newer, Ninja, pkg-config, Qt 6.5 or newer with Widgets and D-Bus, LayerShellQt
+CMake 3.20 or newer, Ninja, pkg-config, Qt 6.5 or newer with Widgets, Network and D-Bus, LayerShellQt
 6.6 or newer, KF6GlobalAccel, Wayland development files, and `wayland-scanner`.
 Native smoke tests additionally use Qt Test. Spectacle supplies capture and
 annotation at runtime; Dolphin supplies **Show in folder**.
@@ -76,6 +76,26 @@ card edges, consistent poses between animation ticks, late-swing copies,
 overlapping cards, active frame pacing, quieter settled motion, and no hidden
 animation work. It is included in `check-ui.sh`.
 
+The FileShare checks run a local HTTP fixture and test raw streamed uploads,
+Origin/CSRF/filename headers, validated receipt persistence, rejected and
+uncertain responses, cancellation and stale-copy prevention. Native card checks
+cover persistence while the shelf is hidden, screenshot-slot separation,
+capture suppression, click-through and Copy-only file-drag acceptance.
+
+The explicit live integration check creates one harmless text upload and uses
+the real Wayland clipboard. It injects native Qt drop/mouse events; compositor
+delivery from another application's actual drag is a separate manual check.
+Use your actual private FileShare address and a private evidence directory:
+
+```sh
+QT_QPA_PLATFORM=wayland linux/target/ui-check/pegline-fileshare-live \
+  https://your-host.your-tailnet.ts.net:3462 /tmp/pegline-fileshare-check
+```
+
+It verifies the server receipt/hash, downloaded bytes and headers, and both
+copied results. Evidence includes a render of its own panel and a private
+receipt for the exact synthetic upload; do not publish that receipt.
+
 ## Desktop checks
 
 Offscreen rendering cannot establish compositor behavior or hardware shortcut
@@ -121,6 +141,8 @@ the line hidden, and clicks beside it must reach the underlying test window.
 | `linux/ui/pegline.cpp` | Tray, Spectacle processes, KDE shortcuts, per-screen panels, session D-Bus controls |
 | `linux/ui/panel.cpp` | Painting, arrival and reveal timers, input mask, card gestures, drag/drop |
 | `linux/ui/clipboard.cpp` | Background PNG and file-URL transfer through Wayland data-control |
+| `linux/ui/fileshare.cpp` | Sequential streamed upload, confirmation, cancel and private recent receipts |
+| `linux/ui/fileshare_card.cpp` | Persistent utility card, drop target, file selection and copy actions |
 | `linux/build.rs`, `linux/ui/CMakeLists.txt` | Native compilation and linkage from Cargo |
 | `linux/data/`, `linux/scripts/` | Icon, desktop entry, user service, installation, and checks |
 

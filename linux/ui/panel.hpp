@@ -2,12 +2,15 @@
 #include <QElapsedTimer>
 #include <QImage>
 #include <QJsonArray>
+#include <QPointer>
 #include <QRasterWindow>
 #include <QTimer>
 #include <QTransform>
 #include <QVariantAnimation>
 #include <functional>
 class QMenu;
+class QPainter;
+class FileShare;
 
 class Panel : public QRasterWindow {
 public:
@@ -26,6 +29,10 @@ public:
   bool isDragging() const { return dragging; }
   void retire();
   QString screenName() const { return assignedScreenName; }
+  void setFileShare(FileShare *share);
+  void setCaptureSuppressed(bool suppressed);
+  QRect fileShareRect() const;
+  void refreshFileShare();
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -63,6 +70,15 @@ private:
   qint64 motionTime = 0;
   qint64 flexAt = 0;
   qreal flexStrength = 0;
+  QPointer<FileShare> fileShare;
+  bool captureSuppressed = false, uploadHover = false, uploadPressed = false;
+  QString shareCopyFeedback;
+  QTransform fileShareTransform() const;
+  bool fileShareAt(QPointF point) const;
+  void paintFileShare(QPainter &painter) const;
+  bool fileShareEvent(QEvent *event);
+  void fileShareMenu(QPoint position);
+  void copyFileShare(const QString &text);
   QRect sensor() const;
   bool overSensor(QPointF point) const;
   int cardAt(QPointF point) const;

@@ -16,7 +16,7 @@ class NativeClipboard : public QObject {
   ext_data_control_device_v1 *device = nullptr;
   ext_data_control_source_v1 *source = nullptr;
   QSocketNotifier *notifier = nullptr;
-  QByteArray png, uri;
+  QByteArray png, uri, text;
 
   static void global(void *data, wl_registry *registry, uint32_t name,
                      const char *interface, uint32_t) {
@@ -38,7 +38,8 @@ class NativeClipboard : public QObject {
   static void send(void *data, ext_data_control_source_v1 *, const char *type,
                    int32_t fd) {
     auto self = static_cast<NativeClipboard *>(data);
-    QByteArray bytes = strcmp(type, "image/png") == 0 ? self->png : self->uri;
+    QByteArray bytes = strcmp(type, "image/png") == 0 ? self->png :
+        strcmp(type, "text/uri-list") == 0 ? self->uri : self->text;
     // Transfers can exceed pipe capacity. Keep the GUI responsive while the
     // receiving application reads; the worker owns its bytes and descriptor.
     std::thread([bytes, fd] {
@@ -96,13 +97,14 @@ public:
     wl_display_flush(display);
   }
 
-  bool copy(const QByteArray &image, const QByteArray &file) {
+  bool copy(const QByteArray &image, const QByteArray &file, const QByteArray &plain = {}) {
     if (!device)
       return false;
     if (source)
       ext_data_control_source_v1_destroy(source);
     png = image;
     uri = file;
+    text = plain;
     source = ext_data_control_manager_v1_create_data_source(manager);
     static const ext_data_control_source_v1_listener sourceListener = {
         send, [](void *data, ext_data_control_source_v1 *source) {
@@ -112,8 +114,12 @@ public:
           ext_data_control_source_v1_destroy(source);
         }};
     ext_data_control_source_v1_add_listener(source, &sourceListener, this);
-    ext_data_control_source_v1_offer(source, "image/png");
-    ext_data_control_source_v1_offer(source, "text/uri-list");
+    if (!png.isEmpty()) ext_data_control_source_v1_offer(source, "image/png");
+    if (!uri.isEmpty()) ext_data_control_source_v1_offer(source, "text/uri-list");
+    if (!text.isEmpty()) {
+      ext_data_control_source_v1_offer(source, "text/plain;charset=utf-8");
+      ext_data_control_source_v1_offer(source, "text/plain");
+    }
     ext_data_control_device_v1_set_selection(device, source);
     return wl_display_roundtrip(display) >= 0;
   }
@@ -136,9 +142,15 @@ public:
   }
 };
 
-bool setNativeClipboard(const QByteArray &png, const QByteArray &uri) {
-  if (QApplication::platformName() != "wayland")
-    return false;
+static NativeClipboard *nativeClipboard() {
   static auto clipboard = new NativeClipboard(qApp);
-  return clipboard->copy(png, uri);
+  return clipboard;
+}
+
+bool setNativeClipboard(const QByteArray &png, const QByteArray &uri) {
+  return QApplication::platformName() == "wayland" && nativeClipboard()->copy(png, uri);
+}
+
+bool setNativeClipboardText(const QByteArray &text) {
+  return QApplication::platformName() == "wayland" && nativeClipboard()->copy({}, {}, text);
 }
