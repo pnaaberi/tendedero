@@ -35,7 +35,7 @@ extern "C" void pg_string_free(char *);
 extern "C" char *pg_copy_video(const char *);
 
 extern "C" bool pg_capture_valid(const char *path) {
-  return !capturePreview(QString::fromUtf8(path), QSize(480, 480)).isNull();
+  return captureValid(QString::fromUtf8(path));
 }
 
 static QJsonObject snapshot() {

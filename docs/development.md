@@ -13,6 +13,9 @@ CMake 3.20 or newer, Ninja, pkg-config, Qt 6.5 or newer with Widgets, Network an
 6.6 or newer, KF6GlobalAccel, Wayland development files, and `wayland-scanner`.
 Native smoke tests additionally use Qt Test. Spectacle supplies capture and
 annotation at runtime; Dolphin supplies **Show in folder**.
+FFmpeg is optional at runtime for video frame previews and required to run
+the additional `--video-previews` native check; the suite reports a skip if
+the executable is unavailable.
 
 The [README installation command](../README.md#install) names the CachyOS/Arch
 packages. See the official Arch package records for
@@ -86,6 +89,9 @@ compositor input serial.
 Set `PEGLINE_TEST_RENDER` to a private PNG path to inspect its synthetic panel.
 The filesystem tests also cover separate Spectacle recording settings,
 overlapping watch folders, growing clips, and unavailable folders.
+The preview check generates synthetic MP4/WebM clips with FFmpeg and verifies
+asynchronous extraction, short clips, refreshed cards without a new reveal,
+original-file copying, cache invalidation, and failed-decode fallback.
 
 The FileShare checks run a local HTTP fixture and test raw streamed uploads,
 Origin/CSRF/filename headers, validated receipt persistence, rejected and
@@ -155,7 +161,7 @@ the line hidden, and clicks beside it must reach the underlying test window.
 | `linux/src/main.rs` | CLI, XDG paths, JSON snapshots, and C ABI ownership |
 | `linux/ui/pegline.cpp` | Tray, Spectacle processes, KDE shortcuts, per-screen panels, session D-Bus controls |
 | `linux/ui/panel.cpp` | Painting, arrival and reveal timers, input mask, card gestures, drag/drop |
-| `linux/ui/media.cpp` | Lightweight video cards, still previews, and animated-capture classification |
+| `linux/ui/media.cpp` | Background video frames, bounded memory cache, fallback cards, and media classification |
 | `linux/ui/clipboard.cpp` | Background PNG and file-URL transfer through Wayland data-control |
 | `linux/ui/fileshare.cpp` | Sequential streamed upload, confirmation, cancel and private recent receipts |
 | `linux/ui/fileshare_card.cpp` | Persistent utility card, drop target, file selection and copy actions |

@@ -62,6 +62,80 @@ int main(int argc, char **argv) {
     QImage fixture(120, 80, QImage::Format_ARGB32);
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
+    if (app.arguments().contains("--video-previews")) {
+      auto makeClip = [&](const QString &file, const QString &color, const QString &duration, const QString &codec) {
+        QProcess ffmpeg;
+        ffmpeg.start("ffmpeg", {"-v", "error", "-nostdin", "-f", "lavfi", "-i",
+            "color=c=" + color + ":s=640x360:r=10:d=" + duration,
+            "-c:v", codec, "-threads", "1", "-y", file});
+        require(ffmpeg.waitForFinished(10000) && ffmpeg.exitCode() == 0, "generate synthetic video with FFmpeg");
+      };
+      const QString clip = directory.filePath("preview with spaces.mp4");
+      const QString shortClip = directory.filePath("short recording.webm");
+      makeClip(clip, "blue", "2", "libx264");
+      makeClip(shortClip, "red", "0.1", "libvpx-vp9");
+      auto blue = [](const QImage &image) {
+        if (image.isNull()) return false;
+        QColor pixel = image.pixelColor(image.width() / 4, image.height() / 4);
+        return pixel.blue() > 180 && pixel.red() < 50;
+      };
+      auto red = [](const QImage &image) {
+        if (image.isNull()) return false;
+        QColor pixel = image.pixelColor(image.width() / 4, image.height() / 4);
+        return pixel.red() > 180 && pixel.blue() < 50;
+      };
+      PaintedPanel panel(app.primaryScreen());
+      panel.resize(1280, 210);
+      const QJsonArray items{QJsonObject{{"path", clip}, {"modified", "1"}}};
+      panel.setItems(items);
+      panel.show();
+      panel.setRevealed(true, false);
+      QImage initial = capturePreview(clip, QSize(600, 420));
+      require(!initial.isNull() && !blue(initial), "first request returns a fallback while extraction runs asynchronously");
+      QImage before = panel.renderFrame();
+      panel.setRevealed(false, false);
+      QElapsedTimer deadline;
+      deadline.start();
+      while (!blue(capturePreview(clip, QSize(600, 420))) && deadline.elapsed() < 5000) QTest::qWait(20);
+      require(blue(capturePreview(clip, QSize(600, 420))), "MP4 preview shows an actual recorded frame");
+      panel.setItems(items);
+      require(!panel.isRevealed() && !panel.isFlying(), "thumbnail completion does not reopen historical cards");
+      panel.setRevealed(true, false);
+      require(panel.renderFrame() != before && panel.cardRect(0).width() > panel.cardRect(0).height(), "existing card refreshes to the frame's aspect ratio");
+      QString render = qEnvironmentVariable("PEGLINE_TEST_RENDER");
+      if (!render.isEmpty()) require(panel.renderFrame().save(render), "save synthetic video preview for review");
+      require(panel.action("copy", clip), "thumbnail card copies its original recording");
+      if (QApplication::platformName() != "wayland")
+        require(QApplication::clipboard()->mimeData()->urls() == QList<QUrl>{QUrl::fromLocalFile(clip)} &&
+                !QApplication::clipboard()->mimeData()->hasImage(), "preview is never substituted for the video on copy");
+      deadline.restart();
+      while (!red(capturePreview(shortClip, QSize(600, 420))) && deadline.elapsed() < 5000) QTest::qWait(20);
+      require(red(capturePreview(shortClip, QSize(600, 420))), "short WebM falls back to its first frame");
+      makeClip(clip, "red", "2", "libx264");
+      deadline.restart();
+      while (!red(capturePreview(clip, QSize(600, 420))) && deadline.elapsed() < 5000) QTest::qWait(20);
+      require(red(capturePreview(clip, QSize(600, 420))), "overwriting a recording invalidates its cached frame");
+      QFile::remove(clip);
+      require(capturePreview(clip, QSize(600, 420)).isNull(), "deleted recordings do not retain a cached preview");
+      QFile corrupt(clip);
+      require(corrupt.open(QIODevice::WriteOnly), "create undecodable recording");
+      corrupt.write(QByteArray::fromHex("000000186674797069736f6d0000020069736f6d69736f32"));
+      corrupt.close();
+      const quint64 revision = capturePreviewRevision();
+      const QImage fallback = capturePreview(clip, QSize(156, 112));
+      deadline.restart();
+      while (capturePreviewRevision() == revision && deadline.elapsed() < 5000) QTest::qWait(20);
+      require(capturePreviewRevision() != revision && capturePreview(clip, QSize(156, 112)) == fallback,
+              "undecodable recording keeps its usable fallback card");
+      const quint64 failedRevision = capturePreviewRevision();
+      for (int i = 0; i < 10; ++i) {
+        capturePreview(clip, QSize(156, 112));
+        QTest::qWait(20);
+      }
+      require(capturePreviewRevision() == failedRevision, "failed decodes are not retried on every UI refresh");
+      std::cout << "Video preview checks passed\n";
+      return 0;
+    }
     if (app.arguments().contains("--videos")) {
       // Only the container header is needed: cards preserve the original file,
       // and playback is delegated to the user's video player.

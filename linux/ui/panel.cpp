@@ -122,7 +122,9 @@ void Panel::setItems(const QJsonArray &items) {
     initialItems = items;
     initialized = true;
   }
-  if (items == lastItems && thumbnailsComplete)
+  const quint64 revision = capturePreviewRevision();
+  const bool previewsChanged = revision != previewRevision;
+  if (items == lastItems && thumbnailsComplete && !previewsChanged)
     return;
   QList<Card> next;
   QString newCapture;
@@ -135,14 +137,17 @@ void Panel::setItems(const QJsonArray &items) {
         std::find_if(cards.begin(), cards.end(), [&](const Card &card) {
           return card.path == path && card.stamp == stamp;
         });
-    if (previous != cards.end()) {
+    if (previous != cards.end() && !(previous->video && previewsChanged)) {
       next.append(*previous);
       continue;
     }
-    QImage image = capturePreview(path, QSize(156, 112));
+    QImage image = capturePreview(path, QSize(156, 112) * devicePixelRatio());
     if (!image.isNull()) {
-      next.append({path, stamp, image, isVideoCapture(path)});
-      if (!initialItems.contains(value) && item["new"].toBool())
+      if (previous != cards.end()) {
+        next.append(*previous);
+        next.last().image = image;
+      } else next.append({path, stamp, image, isVideoCapture(path)});
+      if (previous == cards.end() && !initialItems.contains(value) && item["new"].toBool())
         newCapture = path;
     } else
       complete = false;
@@ -150,6 +155,15 @@ void Panel::setItems(const QJsonArray &items) {
   cards = next;
   lastItems = items;
   thumbnailsComplete = complete;
+  previewRevision = revision;
+  if (previewsChanged && !flightPath.isEmpty()) {
+    QImage preview = capturePreview(flightPath, QSize(600, 420));
+    if (!preview.isNull()) {
+      flightImage = preview;
+      const QSizeF size = preview.size().scaled(int(width() * .65), int(height() * .55), Qt::KeepAspectRatio);
+      flightStart = QRectF(QPointF(width() / 2.0 - size.width() / 2, height() / 2.0 - size.height() / 2), size);
+    }
+  }
   updateInput();
   update();
   if (!newCapture.isEmpty())

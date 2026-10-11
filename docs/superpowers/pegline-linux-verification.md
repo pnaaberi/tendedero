@@ -223,3 +223,18 @@ The previous binary and state, test media, and raw evidence remain outside the
 repository. These checks did not record personal desktop content or exercise a
 physical Spectacle recording gesture; ingestion was tested with synthetic saved
 recordings. No new runtime dependency was added.
+
+## Recording frame previews
+
+MP4/WebM cards now load an actual frame through an optional FFmpeg subprocess.
+Extraction is asynchronous, serialized, time-limited, and restricted to local
+input. A bounded memory cache shares frames across panels; no thumbnail files
+are written. Missing FFmpeg or failed decoding retains the filename card.
+
+The nineteen Rust tests and seven native checks passed, with formatting,
+Clippy, and a release build. New synthetic MP4/WebM checks verify frame pixels,
+short-recording fallback, thumbnail refresh without reopening the shelf,
+original-file copying, replaced/deleted sources, and failed-decode caching.
+Preview checks also passed on Wayland and at double scale. Existing video-card
+checks passed with FFmpeg excluded from the process search path. Synthetic
+frame renders were reviewed; personal recordings were not inspected.

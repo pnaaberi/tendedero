@@ -8,4 +8,9 @@ QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --moti
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --arrival
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --fileshare
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --videos
+if command -v ffmpeg >/dev/null; then
+  QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --video-previews
+else
+  echo 'Skipping video frame previews: optional ffmpeg is unavailable'
+fi
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-fileshare-smoke"

@@ -31,6 +31,9 @@ On an up-to-date system, install the build and desktop dependencies:
 sudo pacman -S --needed git rust base-devel cmake ninja qt6-base qt6-wayland wayland layer-shell-qt kglobalaccel spectacle dolphin
 ```
 
+Install `ffmpeg` for video frame previews (`sudo pacman -S --needed ffmpeg`).
+Without it, recordings still work and use a play-marked filename card.
+
 Then build, install, and start Pegline as your normal user:
 
 ```sh
@@ -144,9 +147,11 @@ Connected screens share the same recent cards.
 
 Pegline watches Spectacle's configured screenshot and recording folders.
 Screenshots and recordings share the eight-card history. MP4 and WebM clips
-appear as play-marked cards with their filenames; double-click opens your
-default player. Animated GIF and WebP captures keep their animation when
-copied or dragged. No additional video decoder is required by Pegline.
+show a frame from the recording with a play badge; double-click opens your
+default player. FFmpeg extracts previews in the background and Pegline keeps
+them only in memory. If a preview cannot be decoded, the filename card stays
+available. Animated GIF and WebP captures keep their animation when copied or
+dragged.
 
 Images support PNG, JPEG, WebP, BMP, GIF, and TIFF through installed Qt codecs.
 Hidden files, symlinks, empty files, and changing writes are ignored. Files

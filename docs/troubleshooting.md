@@ -92,7 +92,12 @@ folder plus `Screencasts` (or Spectacle's translated folder name).
 The tray's **Open recordings folder** opens the watched location. Restart
 Pegline after changing Spectacle's save settings.
 
-MP4 and WebM use a play-marked filename card. Animated GIF and WebP use a still
+MP4 and WebM show a frame preview with a play badge when `ffmpeg` is installed.
+Previews load in the background; short clips use their first frame. A recording
+that cannot be decoded keeps a play-marked filename card. If every video shows
+the filename card, install FFmpeg and restart Pegline. Preview images remain
+in memory and are not saved alongside recordings or in the repository.
+Animated GIF and WebP use a still
 preview with a play badge when supported by the installed Qt image plugin.
 Copy and drag preserve the original recording; double-click opens the default
 player. Image annotation is only offered for still captures.

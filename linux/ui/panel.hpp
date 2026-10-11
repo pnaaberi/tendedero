@@ -59,6 +59,7 @@ private:
   QString flightPath;
   QRectF flightStart;
   bool initialized = false, thumbnailsComplete = false;
+  quint64 previewRevision = 0;
   QElapsedTimer clock;
   bool revealed = false, dragging = false, held = false;
   bool retiring = false;
