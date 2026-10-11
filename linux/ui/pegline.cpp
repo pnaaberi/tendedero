@@ -1,5 +1,6 @@
 #include "panel.hpp"
 #include "fileshare.hpp"
+#include "media.hpp"
 #include <KGlobalAccel>
 #include <QApplication>
 #include <QDBusConnection>
@@ -14,7 +15,6 @@
 #include <QLineEdit>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
@@ -25,17 +25,17 @@
 #include <QSystemTrayIcon>
 #include <QTextStream>
 #include <QUrl>
+#include <QThread>
+#include <QSet>
+#include <memory>
 
 extern "C" char *pg_snapshot();
 extern "C" char *pg_action(const char *, const char *);
 extern "C" void pg_string_free(char *);
+extern "C" char *pg_copy_video(const char *);
 
-extern "C" bool pg_image_valid(const char *path) {
-  QImageReader reader(QString::fromUtf8(path));
-  QSize size = reader.size();
-  if (size.isValid())
-    reader.setScaledSize(size.scaled(480, 480, Qt::KeepAspectRatio));
-  return !reader.read().isNull();
+extern "C" bool pg_capture_valid(const char *path) {
+  return !capturePreview(QString::fromUtf8(path), QSize(480, 480)).isNull();
 }
 
 static QJsonObject snapshot() {
@@ -79,6 +79,7 @@ public:
   QAction shortcut;
   QAction captureShortcut;
   bool capturing = false;
+  QSet<QString> savingVideos;
   FileShare *fileShare = nullptr;
 
   QString shareConfigPath() const {
@@ -129,7 +130,7 @@ public:
       : shortcut("Show or hide Pegline", this),
         captureShortcut("Capture a region to Pegline", this) {
     tray.setIcon(ownIcon());
-    tray.setToolTip("Pegline — screenshots within reach");
+    tray.setToolTip("Pegline — captures within reach");
     tray.setContextMenu(&menu);
     auto add = [this](const QString &label,
                       const std::function<void()> &action) {
@@ -142,6 +143,9 @@ public:
     add("Capture current screen", [this] { capture("--current"); });
     add("Open screenshot folder", [this] {
       QDesktopServices::openUrl(QUrl::fromLocalFile(state["watch"].toString()));
+    });
+    add("Open recordings folder", [this] {
+      QDesktopServices::openUrl(QUrl::fromLocalFile(state["recordings"].toString()));
     });
     add("Take all down (keep files)", [this] {
       for (auto value : state["items"].toArray())
@@ -271,7 +275,31 @@ public:
         known = true;
     if (!known)
       return json(
-          {{"ok", false}, {"error", "Screenshot is no longer on the line"}});
+          {{"ok", false}, {"error", "Capture is no longer on the line"}});
+    if (operation == "save" && isVideoCapture(path)) {
+      if (savingVideos.contains(path))
+        return json({{"ok", false}, {"error", "This recording is already being copied"}});
+      savingVideos.insert(path);
+      auto result = std::make_shared<QJsonObject>();
+      auto worker = QThread::create([path, result] {
+        char *reply = pg_copy_video(path.toUtf8().constData());
+        *result = QJsonDocument::fromJson(reply).object();
+        pg_string_free(reply);
+      });
+      // QThread::create workers wait on destruction so quitting cannot abandon
+      // a partially saved copy. Normal copy I/O never blocks the event loop.
+      worker->setParent(this);
+      QObject::connect(worker, &QThread::finished, this, [this, path, result, worker] {
+        savingVideos.remove(path);
+        if ((*result)["ok"].toBool())
+          tray.showMessage("Pegline", "Saved to " + (*result)["saved"].toString());
+        else
+          report((*result)["error"].toString());
+        worker->deleteLater();
+      });
+      worker->start();
+      return json({{"ok", true}, {"pending", true}});
+    }
     if (operation == "dismiss" || operation == "save") {
       auto op = operation.toUtf8(), file = path.toUtf8();
       char *reply = pg_action(op.constData(), file.constData());
@@ -294,6 +322,8 @@ public:
     } else if (operation == "open")
       ok = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     else if (operation == "annotate") {
+      if (isVideoCapture(path))
+        return json({{"ok", false}, {"error", "Annotation is available for still images"}});
       control("Hide");
       ok = QProcess::startDetached("spectacle", {"--edit-existing", path});
     } else if (operation == "reveal")

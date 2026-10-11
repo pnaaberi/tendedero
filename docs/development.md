@@ -76,6 +76,17 @@ card edges, consistent poses between animation ticks, late-swing copies,
 overlapping cards, active frame pacing, quieter settled motion, and no hidden
 animation work. It is included in `check-ui.sh`.
 
+The video mode checks MP4/WebM container cards, animated GIF classification,
+original-file clipboard data, mixed capture history, arrival animation,
+video-specific menus, annotation rejection, and mixed FileShare drag acceptance.
+Animated WebP also keeps its original file on copy. Run `pegline-ui-smoke --videos`
+with `QT_QPA_PLATFORM=wayland` to verify URI-only clipboard transfer through
+`wl-paste`; popup-menu injection is checked offscreen because it lacks a Wayland
+compositor input serial.
+Set `PEGLINE_TEST_RENDER` to a private PNG path to inspect its synthetic panel.
+The filesystem tests also cover separate Spectacle recording settings,
+overlapping watch folders, growing clips, and unavailable folders.
+
 The FileShare checks run a local HTTP fixture and test raw streamed uploads,
 Origin/CSRF/filename headers, validated receipt persistence, rejected and
 uncertain responses, cancellation and stale-copy prevention. Native card checks
@@ -144,6 +155,7 @@ the line hidden, and clicks beside it must reach the underlying test window.
 | `linux/src/main.rs` | CLI, XDG paths, JSON snapshots, and C ABI ownership |
 | `linux/ui/pegline.cpp` | Tray, Spectacle processes, KDE shortcuts, per-screen panels, session D-Bus controls |
 | `linux/ui/panel.cpp` | Painting, arrival and reveal timers, input mask, card gestures, drag/drop |
+| `linux/ui/media.cpp` | Lightweight video cards, still previews, and animated-capture classification |
 | `linux/ui/clipboard.cpp` | Background PNG and file-URL transfer through Wayland data-control |
 | `linux/ui/fileshare.cpp` | Sequential streamed upload, confirmation, cancel and private recent receipts |
 | `linux/ui/fileshare_card.cpp` | Persistent utility card, drop target, file selection and copy actions |

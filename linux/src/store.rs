@@ -15,16 +15,19 @@ struct Fingerprint {
 
 #[derive(Default, Deserialize, Serialize)]
 struct Saved {
+    #[serde(default)]
+    roots: BTreeMap<PathBuf, PathBuf>,
     items: Vec<PathBuf>,
     known: BTreeMap<PathBuf, Fingerprint>,
 }
 
 pub struct Store {
-    pub watch: PathBuf,
+    pub watches: Vec<PathBuf>,
     pub items: Vec<PathBuf>,
     pub error: Option<String>,
     pub warning: Option<String>,
     state: PathBuf,
+    roots: BTreeMap<PathBuf, PathBuf>,
     known: BTreeMap<PathBuf, Fingerprint>,
     samples: BTreeMap<PathBuf, Fingerprint>,
     startup: Option<BTreeMap<PathBuf, Fingerprint>>,
@@ -32,9 +35,7 @@ pub struct Store {
     dirty: bool,
 }
 impl Store {
-    pub fn open(watch: PathBuf, state: PathBuf) -> io::Result<Self> {
-        fs::create_dir_all(&watch)?;
-        let watch = fs::canonicalize(watch)?;
+    pub fn open(folders: Vec<PathBuf>, state: PathBuf) -> io::Result<Self> {
         let mut warning = None;
         let mut saved = match fs::read(&state) {
             Ok(bytes) => match serde_json::from_slice::<Saved>(&bytes) {
@@ -56,18 +57,55 @@ impl Store {
             Err(e) if e.kind() == io::ErrorKind::NotFound => Saved::default(),
             Err(e) => return Err(e),
         };
-        saved
-            .known
-            .retain(|path, _| path.parent() == Some(watch.as_path()));
-        saved
-            .items
-            .retain(|path| saved.known.contains_key(path) && path.is_file());
+        let mut watches = Vec::new();
+        let mut roots = BTreeMap::new();
+        for folder in folders {
+            let folder = if folder.is_absolute() {
+                folder
+            } else {
+                std::env::current_dir()?.join(folder)
+            };
+            // Keep each configured root's identity across a temporary outage.
+            // Scan errors are independent, so one root cannot stall the other.
+            let _ = fs::create_dir_all(&folder);
+            let resolved = fs::canonicalize(&folder).unwrap_or_else(|_| {
+                saved.roots.get(&folder).cloned().unwrap_or_else(|| {
+                    fs::read_link(&folder)
+                        .map(|target| {
+                            if target.is_absolute() {
+                                target
+                            } else {
+                                folder.parent().unwrap().join(target)
+                            }
+                        })
+                        .unwrap_or_else(|_| folder.clone())
+                })
+            });
+            roots.insert(folder, resolved.clone());
+            if !watches.contains(&resolved) {
+                watches.push(resolved);
+            }
+        }
+        if watches.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "No capture folders",
+            ));
+        }
+        let dirty = roots != saved.roots;
+        saved.known.retain(|path, _| {
+            watches
+                .iter()
+                .any(|folder| path.parent() == Some(folder.as_path()))
+        });
+        saved.items.retain(|path| saved.known.contains_key(path));
         saved.items.dedup();
         if saved.items.len() > 8 {
             saved.items.drain(..saved.items.len() - 8);
         }
         Ok(Self {
-            watch,
+            watches,
+            roots,
             items: saved.items,
             state,
             known: saved.known,
@@ -76,7 +114,7 @@ impl Store {
             rejected: BTreeMap::new(),
             error: None,
             warning,
-            dirty: false,
+            dirty,
         })
     }
 
@@ -85,42 +123,30 @@ impl Store {
         self.error = None;
         let result = self.scan_files(valid);
         if let Err(e) = &result {
-            self.error = Some(format!(
-                "Cannot refresh screenshots in {}: {e}",
-                self.watch.display()
-            ));
+            self.error = Some(format!("Cannot refresh captures: {e}"));
         }
         result
     }
 
     fn scan_files(&mut self, valid: impl Fn(&Path) -> bool) -> io::Result<bool> {
         let mut current = BTreeMap::new();
-        for entry in fs::read_dir(&self.watch)? {
-            let path = entry?.path();
-            if !candidate(&path) {
-                continue;
+        let mut scan_error = None;
+        for folder in &self.watches {
+            match scan_directory(folder) {
+                Ok(files) => current.extend(files),
+                Err(error) => {
+                    current.extend(
+                        self.known
+                            .iter()
+                            .filter(|(path, _)| path.parent() == Some(folder.as_path()))
+                            .map(|(path, stamp)| (path.clone(), *stamp)),
+                    );
+                    scan_error = Some(io::Error::new(
+                        error.kind(),
+                        format!("{}: {error}", folder.display()),
+                    ));
+                }
             }
-            let metadata = match fs::symlink_metadata(&path) {
-                Ok(m) => m,
-                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
-                Err(e) => return Err(e),
-            };
-            if !metadata.file_type().is_file() || metadata.len() == 0 {
-                continue;
-            }
-            let modified = metadata
-                .modified()?
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-                .min(u64::MAX as u128) as u64;
-            current.insert(
-                path,
-                Fingerprint {
-                    modified,
-                    size: metadata.len(),
-                },
-            );
         }
         self.startup.get_or_insert_with(|| current.clone());
         let before = self.items.clone();
@@ -141,7 +167,7 @@ impl Store {
                 let (_, attempts) = self.rejected.entry(path.clone()).or_insert((*stamp, 0));
                 *attempts = attempts.saturating_add(1);
                 if *attempts >= 3 && self.error.is_none() {
-                    self.error = Some(format!("Cannot decode image: {}", path.display()));
+                    self.error = Some(format!("Cannot read capture: {}", path.display()));
                 }
                 continue;
             }
@@ -158,6 +184,9 @@ impl Store {
         self.dirty |= changed;
         if self.dirty {
             self.persist()?;
+        }
+        if let Some(error) = scan_error {
+            return Err(error);
         }
         Ok(changed)
     }
@@ -187,42 +216,9 @@ impl Store {
 
     pub fn save_copy(&self, path: &Path, destination: &Path) -> io::Result<PathBuf> {
         if !self.items.iter().any(|item| item == path) {
-            return Err(io::Error::other("Screenshot is no longer on the line"));
+            return Err(io::Error::other("Capture is no longer on the line"));
         }
-        fs::create_dir_all(destination)?;
-        let name = path
-            .file_name()
-            .ok_or_else(|| io::Error::other("Missing filename"))?;
-        let stem = path.file_stem().unwrap_or(name).to_string_lossy();
-        let ext = path
-            .extension()
-            .map(|e| format!(".{}", e.to_string_lossy()))
-            .unwrap_or_default();
-        for n in 1..10000 {
-            let target = destination.join(if n == 1 {
-                name.to_os_string()
-            } else {
-                format!("{stem} ({n}){ext}").into()
-            });
-            let mut output = match OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&target)
-            {
-                Ok(file) => file,
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(e),
-            };
-            let copied = fs::File::open(path)
-                .and_then(|mut input| io::copy(&mut input, &mut output))
-                .and_then(|_| output.sync_all());
-            if let Err(e) = copied {
-                let _ = fs::remove_file(&target);
-                return Err(e);
-            }
-            return Ok(target);
-        }
-        Err(io::Error::other("Too many filename collisions"))
+        copy_capture(path, destination)
     }
 
     fn persist(&mut self) -> io::Result<()> {
@@ -236,6 +232,7 @@ impl Store {
             .mode(0o700)
             .create(parent)?;
         let bytes = serde_json::to_vec(&Saved {
+            roots: self.roots.clone(),
             items: self.items.clone(),
             known: self.known.clone(),
         })
@@ -255,6 +252,76 @@ impl Store {
     }
 }
 
+/// Copy a capture without accessing store state; safe to run on a worker.
+pub fn copy_capture(path: &Path, destination: &Path) -> io::Result<PathBuf> {
+    fs::create_dir_all(destination)?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("Missing filename"))?;
+    let stem = path.file_stem().unwrap_or(name).to_string_lossy();
+    let ext = path
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+    for n in 1..10000 {
+        let target = destination.join(if n == 1 {
+            name.to_os_string()
+        } else {
+            format!("{stem} ({n}){ext}").into()
+        });
+        let mut output = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+        {
+            Ok(file) => file,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        };
+        let copied = fs::File::open(path)
+            .and_then(|mut input| io::copy(&mut input, &mut output))
+            .and_then(|_| output.sync_all());
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&target);
+            return Err(e);
+        }
+        return Ok(target);
+    }
+    Err(io::Error::other("Too many filename collisions"))
+}
+
+fn scan_directory(folder: &Path) -> io::Result<BTreeMap<PathBuf, Fingerprint>> {
+    let mut current = BTreeMap::new();
+    for entry in fs::read_dir(folder)? {
+        let path = entry?.path();
+        if !candidate(&path) {
+            continue;
+        }
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(m) => m,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
+        if !metadata.file_type().is_file() || metadata.len() == 0 {
+            continue;
+        }
+        let modified = metadata
+            .modified()?
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+            .min(u64::MAX as u128) as u64;
+        current.insert(
+            path,
+            Fingerprint {
+                modified,
+                size: metadata.len(),
+            },
+        );
+    }
+    Ok(current)
+}
+
 fn candidate(path: &Path) -> bool {
     if path
         .file_name()
@@ -265,20 +332,62 @@ fn candidate(path: &Path) -> bool {
     path.extension().is_some_and(|ext| {
         matches!(
             ext.to_string_lossy().to_lowercase().as_str(),
-            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tif" | "tiff"
+            "png" | "jpg" | "jpeg" | "webp" | "bmp" | "gif" | "tif" | "tiff" | "mp4" | "webm"
         )
     })
 }
 
 pub fn spectacle_folder(settings: &str, home: &Path) -> PathBuf {
-    let mut in_images = false;
+    spectacle_save_folder(
+        settings,
+        home,
+        "[ImageSave]",
+        "imageSaveLocation=",
+        home.join("Pictures/Screenshots"),
+    )
+}
+
+pub fn spectacle_recording_folder(settings: &str, home: &Path, videos: &Path) -> PathBuf {
+    let mut subfolder = "Screencasts";
+    let mut in_videos = false;
     for line in settings.lines().map(str::trim) {
         if line.starts_with('[') {
-            in_images = line == "[ImageSave]";
+            in_videos = line == "[VideoSave]";
+        }
+        if in_videos
+            && let Some(value) = line.strip_prefix("translatedScreencastsFolder=")
+            && !value.is_empty()
+            && !value.contains('/')
+            && value != "."
+            && value != ".."
+        {
+            subfolder = value;
+        }
+    }
+    spectacle_save_folder(
+        settings,
+        home,
+        "[VideoSave]",
+        "videoSaveLocation=",
+        videos.join(subfolder),
+    )
+}
+
+fn spectacle_save_folder(
+    settings: &str,
+    home: &Path,
+    group: &str,
+    key: &str,
+    fallback: PathBuf,
+) -> PathBuf {
+    let mut in_group = false;
+    for line in settings.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_group = line == group;
             continue;
         }
-        if in_images
-            && let Some(value) = line.strip_prefix("imageSaveLocation=")
+        if in_group
+            && let Some(value) = line.strip_prefix(key)
             && !value.is_empty()
         {
             let value = value.strip_prefix("file://").unwrap_or(value);
@@ -310,7 +419,7 @@ pub fn spectacle_folder(settings: &str, home: &Path) -> PathBuf {
             }
         }
     }
-    home.join("Pictures/Screenshots")
+    fallback
 }
 
 #[cfg(test)]
@@ -335,7 +444,7 @@ mod tests {
             Self(path)
         }
         fn store(&self) -> Store {
-            Store::open(self.0.join("shots"), self.0.join("state.json")).unwrap()
+            Store::open(vec![self.0.join("shots")], self.0.join("state.json")).unwrap()
         }
         fn image(&self, name: &str) -> PathBuf {
             let path = self.0.join("shots").join(name);
@@ -404,10 +513,10 @@ mod tests {
     }
 
     #[test]
-    fn filters_hidden_files_video_symlinks_and_empty_images() {
+    fn filters_hidden_files_unsupported_formats_symlinks_and_empty_captures() {
         let f = Fixture::new();
         let image = f.image("actual.PNG");
-        f.image("video.webm");
+        f.image("document.pdf");
         f.image(".hidden.png");
         fs::write(f.0.join("shots/empty.png"), b"").unwrap();
         std::os::unix::fs::symlink(&image, f.0.join("shots/link.png")).unwrap();
@@ -416,6 +525,71 @@ mod tests {
         s.scan(|_| true).unwrap();
         s.scan(|_| true).unwrap();
         assert_eq!(s.items, vec![image]);
+    }
+
+    #[test]
+    fn combines_screenshots_and_recordings_with_shared_history_and_capacity() {
+        let f = Fixture::new();
+        let videos = f.0.join("videos");
+        fs::create_dir(&videos).unwrap();
+        let shot = f.image("shot.png");
+        let clip = videos.join("clip.webm");
+        let folders = vec![f.0.join("shots"), videos.clone()];
+        let mut s = Store::open(folders.clone(), f.0.join("state.json")).unwrap();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        fs::write(&clip, b"synthetic recording").unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(
+            !s.items.contains(&clip),
+            "recordings also need a stable second sample"
+        );
+        s.scan(|_| true).unwrap();
+        assert!(s.items.contains(&shot) && s.items.contains(&clip));
+        assert!(s.is_new_capture(&clip));
+        let mut restarted = Store::open(folders, f.0.join("state.json")).unwrap();
+        restarted.scan(|_| true).unwrap();
+        restarted.scan(|_| true).unwrap();
+        assert!(
+            !restarted.is_new_capture(&clip),
+            "restored recordings stay quiet"
+        );
+        restarted.dismiss(&clip).unwrap();
+        restarted.scan(|_| true).unwrap();
+        assert!(!restarted.items.contains(&clip) && clip.exists());
+        for n in 0..10 {
+            fs::write(videos.join(format!("clip-{n}.MP4")), b"synthetic recording").unwrap();
+        }
+        restarted.scan(|_| true).unwrap();
+        restarted.scan(|_| true).unwrap();
+        assert_eq!(restarted.items.len(), 8);
+        assert!(
+            shot.exists() && clip.exists(),
+            "capacity never removes originals"
+        );
+    }
+
+    #[test]
+    fn unavailable_recording_folder_does_not_stall_screenshot_imports() {
+        let f = Fixture::new();
+        let videos = f.0.join("videos");
+        let mut s = Store::open(
+            vec![f.0.join("shots"), videos.clone()],
+            f.0.join("state.json"),
+        )
+        .unwrap();
+        let clip = videos.join("clip.webm");
+        fs::write(&clip, b"synthetic recording").unwrap();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        fs::rename(&videos, f.0.join("offline-videos")).unwrap();
+        let shot = f.image("new.png");
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.items.contains(&shot) && s.items.contains(&clip));
+        fs::rename(f.0.join("offline-videos"), &videos).unwrap();
+        s.scan(|_| true).unwrap();
+        assert!(s.error.is_none());
     }
 
     #[test]
@@ -508,6 +682,127 @@ mod tests {
             spectacle_folder("[VideoSave]\nimageSaveLocation=/ignore/me\n", home),
             home.join("Pictures/Screenshots")
         );
+    }
+
+    #[test]
+    fn recording_folder_uses_spectacle_setting_or_xdg_video_default() {
+        let home = Path::new("/home/example");
+        let videos = Path::new("/media/Videos");
+        assert_eq!(
+            spectacle_recording_folder("", home, videos),
+            videos.join("Screencasts")
+        );
+        assert_eq!(
+            spectacle_recording_folder(
+                "[VideoSave]\nvideoSaveLocation=file:///media/My%20Clips\n[ImageSave]\nimageSaveLocation=/ignored\n",
+                home,
+                videos
+            ),
+            PathBuf::from("/media/My Clips")
+        );
+        assert_eq!(
+            spectacle_recording_folder("[VideoSave]\nvideoSaveLocation=~/My clips\n", home, videos),
+            home.join("My clips")
+        );
+        assert_eq!(
+            spectacle_recording_folder(
+                "[VideoSave]\ntranslatedScreencastsFolder=Tallenteet\n",
+                home,
+                videos
+            ),
+            videos.join("Tallenteet")
+        );
+        assert_eq!(
+            spectacle_recording_folder(
+                "[VideoSave]\ntranslatedScreencastsFolder=../elsewhere\nvideoSaveLocation=relative\n",
+                home,
+                videos
+            ),
+            videos.join("Screencasts")
+        );
+    }
+
+    #[test]
+    fn shared_folder_is_scanned_once_and_growing_video_waits_for_stability() {
+        let f = Fixture::new();
+        let folder = f.0.join("shots");
+        let mut s = Store::open(vec![folder.clone(), folder], f.0.join("state.json")).unwrap();
+        assert_eq!(s.watches.len(), 1);
+        s.scan(|_| true).unwrap();
+        let clip = f.image("recording.webm");
+        s.scan(|_| panic!("first sample is not stable")).unwrap();
+        fs::write(&clip, b"recording is still growing").unwrap();
+        s.scan(|_| panic!("changed sample is not stable")).unwrap();
+        assert!(s.items.is_empty());
+        s.scan(|_| true).unwrap();
+        assert_eq!(s.items, vec![clip]);
+    }
+
+    #[test]
+    fn unavailable_root_at_startup_does_not_disable_other_folder() {
+        let f = Fixture::new();
+        // A regular file in place of a directory fails even when tests run as root.
+        let unavailable = f.0.join("offline");
+        fs::write(&unavailable, b"not a directory").unwrap();
+        let mut s = Store::open(
+            vec![f.0.join("shots"), unavailable.join("videos")],
+            f.0.join("state.json"),
+        )
+        .unwrap();
+        let shot = f.image("shot.png");
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.scan(|_| true).is_err());
+        assert_eq!(s.items, vec![shot.clone()]);
+        assert!(!s.is_new_capture(&shot));
+    }
+
+    #[test]
+    fn symlinked_recording_root_retains_dismissals_across_offline_restart() {
+        use std::os::unix::fs::symlink;
+        let f = Fixture::new();
+        let target = f.0.join("mounted-videos");
+        let alias = f.0.join("videos");
+        fs::create_dir(&target).unwrap();
+        symlink(&target, &alias).unwrap();
+        let clip = target.join("dismissed.mp4");
+        fs::write(&clip, b"fixture recording").unwrap();
+        let folders = vec![f.0.join("shots"), alias];
+        let state = f.0.join("state.json");
+        let mut s = Store::open(folders.clone(), state.clone()).unwrap();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        s.dismiss(&clip).unwrap();
+        fs::rename(&target, f.0.join("offline")).unwrap();
+        let mut s = Store::open(folders, state).unwrap();
+        let shot = f.image("new-shot.png");
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.scan(|_| true).is_err());
+        assert_eq!(s.items, vec![shot.clone()]);
+        fs::rename(f.0.join("offline"), &target).unwrap();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        assert_eq!(s.items, vec![shot]);
+        assert!(!s.is_new_capture(&clip));
+    }
+
+    #[test]
+    fn changing_watch_scope_with_unavailable_root_does_not_restore_unrelated_cards() {
+        let f = Fixture::new();
+        f.image("old-private-shot.png");
+        let mut s = f.store();
+        s.scan(|_| true).unwrap();
+        s.scan(|_| true).unwrap();
+        let blocked = f.0.join("unavailable");
+        fs::write(&blocked, b"not a folder").unwrap();
+        let mut s = Store::open(
+            vec![f.0.join("new-shots"), blocked.join("videos")],
+            f.0.join("state.json"),
+        )
+        .unwrap();
+        assert!(s.items.is_empty());
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.scan(|_| true).is_err());
+        assert!(s.items.is_empty() && s.known.is_empty());
     }
 
     #[test]

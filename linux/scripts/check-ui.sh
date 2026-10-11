@@ -7,4 +7,5 @@ QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke"
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --motion
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --arrival
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --fileshare
+QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-ui-smoke" --videos
 QT_QPA_PLATFORM=offscreen "$project_dir/target/ui-check/pegline-fileshare-smoke"

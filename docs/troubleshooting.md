@@ -20,6 +20,7 @@ When the app is running, `--status` reports:
 | --- | --- |
 | `platform` | `wayland` for the supported desktop session |
 | `watch` | The screenshot directory actually being monitored |
+| `recordings` | The recording directory being monitored (same as `watch` for a single-folder override) |
 | `items` | Retained cards with file paths, `modified` timestamps, `size` in bytes, and `new` capture flags |
 | `visible` | Whether the line is revealed on any screen |
 | `capturing` | Whether a Pegline-launched Spectacle capture is in progress |
@@ -73,7 +74,7 @@ systemctl --user restart pegline.service
 ```
 
 The directory must be readable, and images must be complete, nonempty regular
-files. Hidden files, symlinks, videos, and unsupported formats are ignored.
+files. Hidden files, symlinks, and unsupported formats are ignored.
 Pegline samples every 500 ms and waits for two matching file samples, so allow
 a short delay after a screenshot is saved. Stable images that repeatedly fail
 to decode produce an error and remain eligible for retry.
@@ -81,6 +82,20 @@ to decode produce an error and remain eligible for retry.
 If a file is present but the line stays hidden at startup, that is expected:
 existing images restore quietly. Captures created after startup trigger the
 flight and ten-second reveal.
+
+### Recordings do not appear
+
+Save or finish the recording in Spectacle, then compare the `recordings` field
+in `pegline --status` with Spectacle's video-save location. Pegline reads
+`[VideoSave] videoSaveLocation` at startup. Its default is your XDG Videos
+folder plus `Screencasts` (or Spectacle's translated folder name).
+The tray's **Open recordings folder** opens the watched location. Restart
+Pegline after changing Spectacle's save settings.
+
+MP4 and WebM use a play-marked filename card. Animated GIF and WebP use a still
+preview with a play badge when supported by the installed Qt image plugin.
+Copy and drag preserve the original recording; double-click opens the default
+player. Image annotation is only offered for still captures.
 
 ### Try a different watch folder
 
@@ -94,7 +109,15 @@ systemctl --user stop pegline.service
 The foreground process runs until you press Ctrl+C. Restore the installed
 service afterward with `systemctl --user start pegline.service`.
 
-`--watch` changes monitoring only. It does not change where Spectacle saves
+`--watch DIRECTORY` replaces both default folders with a single watched folder.
+Add `--watch-videos DIRECTORY` to monitor a second folder. For example:
+
+```sh
+~/.local/bin/pegline --watch "$HOME/Pictures/Screenshots" \
+  --watch-videos "$HOME/Videos/Screencasts" --daemon
+```
+
+These options change monitoring only. They do not change where Spectacle saves
 captures. Match the watch directory to Spectacle's save location if you want
 Pegline's capture actions to feed the line. Passing `--watch` to an already
 running instance does not change its directory.
@@ -174,8 +197,9 @@ children. The user service uses an explicit executable path.
 
 ## Copy, annotation, or locating a file fails
 
-Clicking copies a full PNG plus a file URL. The receiving application must
-support image paste or file URLs; try another image-capable application to
+Clicking an image copies a full PNG plus a file URL. Clicking a video copies
+its original file URL. The receiving application must support image paste or
+file URLs; try another compatible application to
 separate clipboard support from a receiving-app limitation.
 
 On Wayland, background clipboard access requires the compositor's
@@ -187,7 +211,7 @@ Wayland failure check.
 Annotation requires Spectacle's existing-image editor. **Show in folder**
 launches Dolphin with the file selected; install Dolphin if your KDE setup
 omits it. Both actions need the source image to remain readable. Saving a copy
-also requires your Pictures directory to be writable.
+also requires your Pictures or Videos directory to be writable.
 
 ## The line hides later than ten seconds
 

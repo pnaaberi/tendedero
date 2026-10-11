@@ -1,6 +1,8 @@
 #include "panel.hpp"
 #include "clipboard.hpp"
 #include "fileshare.hpp"
+#include "media.hpp"
+#include <QFileInfo>
 #include <LayerShellQt/Window>
 #include <QApplication>
 #include <QBuffer>
@@ -87,7 +89,7 @@ Panel::Panel(QScreen *output) {
   QObject::connect(&holdTimer, &QTimer::timeout, this, [this] {
     if (!pressed.isEmpty() && !dragging) {
       held = true;
-      action("annotate", pressed);
+      action(isVideoCapture(pressed) ? "open" : "annotate", pressed);
     }
   });
   breezeTimer.setInterval(40);
@@ -137,14 +139,9 @@ void Panel::setItems(const QJsonArray &items) {
       next.append(*previous);
       continue;
     }
-    QImageReader reader(path);
-    QSize size = reader.size();
-    if (size.isValid())
-      reader.setScaledSize(size.scaled(156, 112, Qt::KeepAspectRatio));
-    reader.setAutoTransform(true);
-    QImage image = reader.read();
+    QImage image = capturePreview(path, QSize(156, 112));
     if (!image.isNull()) {
-      next.append({path, stamp, image});
+      next.append({path, stamp, image, isVideoCapture(path)});
       if (!initialItems.contains(value) && item["new"].toBool())
         newCapture = path;
     } else
@@ -170,12 +167,7 @@ void Panel::showCapture(const QString &path) {
   stopFlight();
   setRevealed(true, false);
   captureTimer.start(10000);
-  QImageReader reader(path);
-  reader.setAutoTransform(true);
-  QSize size = reader.size();
-  if (size.isValid())
-    reader.setScaledSize(size.scaled(600, 420, Qt::KeepAspectRatio));
-  flightImage = reader.read();
+  flightImage = capturePreview(path, QSize(600, 420));
   if (flightImage.isNull())
     return;
   flightPath = path;
@@ -480,34 +472,46 @@ bool Panel::action(const QString &operation, const QString &path) {
                            [&](const Card &item) { return item.path == path; });
   if (card == cards.end())
     return false;
+  if (operation == "annotate" && card->video)
+    return false;
   if (operation == "copy") {
-    QImageReader reader(path);
-    reader.setAutoTransform(true);
-    QImage image = reader.read();
-    if (image.isNull()) {
+    QImage image;
+    QByteArray png;
+    if (!QFileInfo(path).isReadable()) {
       if (onError)
-        onError("Cannot read image: " + reader.errorString());
+        onError("Capture is no longer readable");
       return false;
     }
-    QByteArray png;
-    QBuffer buffer(&png);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG")) {
-      if (onError)
-        onError("Cannot encode screenshot for clipboard");
-      return false;
+    if (!card->video) {
+      QImageReader reader(path);
+      reader.setAutoTransform(true);
+      image = reader.read();
+      if (image.isNull()) {
+        if (onError)
+          onError("Cannot read image: " + reader.errorString());
+        return false;
+      }
+      QBuffer buffer(&png);
+      buffer.open(QIODevice::WriteOnly);
+      if (!image.save(&buffer, "PNG")) {
+        if (onError)
+          onError("Cannot encode screenshot for clipboard");
+        return false;
+      }
     }
     if (QApplication::platformName() == "wayland") {
       if (!setNativeClipboard(png,
                               QUrl::fromLocalFile(path).toEncoded() + "\r\n")) {
         if (onError)
-          onError("Could not copy screenshot to the Wayland clipboard");
+          onError("Could not copy capture to the Wayland clipboard");
         return false;
       }
     } else {
       auto mime = new QMimeData;
-      mime->setImageData(image);
-      mime->setData("image/png", png);
+      if (!image.isNull()) {
+        mime->setImageData(image);
+        mime->setData("image/png", png);
+      }
       mime->setUrls({QUrl::fromLocalFile(path)});
       QApplication::clipboard()->setMimeData(mime);
     }
@@ -530,15 +534,18 @@ void Panel::mousePressEvent(QMouseEvent *event) {
     return;
   }
   QString path = cards[index].path;
+  const bool video = cards[index].video;
   if (event->button() == Qt::RightButton) {
     QMenu menu;
     for (const auto &entry :
-         QList<QPair<QString, QString>>{{"Copy image", "copy"},
-                                        {"Open", "open"},
+         QList<QPair<QString, QString>>{{video ? "Copy video" : "Copy image", "copy"},
+                                        {video ? "Play" : "Open", "open"},
                                         {"Annotate in Spectacle", "annotate"},
                                         {"Show in folder", "reveal"},
-                                        {"Save a copy to Pictures", "save"},
+                                        {video ? "Save a copy to Videos" : "Save a copy to Pictures", "save"},
                                         {"Take down (keep file)", "dismiss"}}) {
+      if (video && entry.second == "annotate")
+        continue;
       auto item = menu.addAction(entry.first);
       QObject::connect(item, &QAction::triggered, this,
                        [this, entry, path] { action(entry.second, path); });

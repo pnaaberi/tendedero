@@ -80,16 +80,17 @@ You can always capture from Pegline's tray menu.
 | Meta+Shift+S | Capture a region through Spectacle |
 | Meta+Alt+T or left-click the tray icon | Show or hide the line |
 | Hover or click the small green marker at a screen's top center | Reveal the line |
-| Click a card | Copy the full image and its file URL |
-| Double-click a card | Open in your default image viewer |
-| Hold a card for 450 ms | Open Spectacle's annotation editor |
+| Click a card | Copy the full image and its file URL, or the original video file URL |
+| Double-click a card | Open in your default image viewer or video player |
+| Hold a card for 450 ms | Annotate an image in Spectacle, or play a video |
 | Drag a card | Share its file; a file manager can copy or move it |
 | Right-click a card | Copy, open, annotate, locate, save a copy, or take down |
 | Click a card's cross | Take down that card and keep its file |
 
 The tray menu also offers **Capture current screen**, **Open screenshot
-folder**, and **Take all down (keep files)**. Saving a copy uses your configured
-Pictures folder and a unique filename; existing files are never overwritten.
+folder**, **Open recordings folder**, and **Take all down (keep files)**. Saving
+a copy uses your configured Pictures or Videos folder and a unique filename;
+existing files are never overwritten.
 
 ### FileShare uploads
 
@@ -99,8 +100,8 @@ with the normal Pegline shelf and hides with it. Its dashed target and file
 icon accept one or many local files; click it to choose files. Dragging files
 over the normal top-center marker also reveals the shelf. The private server
 address is never displayed on the card.
-You can also drag a screenshot card onto FileShare. The utility card does not
-use one of the eight screenshot slots and hides during Pegline captures.
+You can also drag a screenshot or recording card onto FileShare. The utility
+card does not use one of the eight capture slots and hides during Pegline captures.
 
 Before dropping, the target shows the selection's file count and total size.
 Transfers run sequentially, with the current file, batch position, progress
@@ -141,12 +142,17 @@ can finish. A line revealed manually hides shortly after the pointer leaves;
 an open card menu postpones this hiding.
 Connected screens share the same recent cards.
 
-Pegline watches Spectacle's configured image-save folder. It accepts PNG, JPEG,
-WebP, BMP, GIF, and TIFF when installed Qt codecs can decode them, and ignores
-videos, hidden files, symlinks, and incomplete writes. Files moved or deleted
-elsewhere disappear from the line. Dismissal and capacity eviction keep the
-originals. [Folder settings](docs/troubleshooting.md#screenshots-do-not-appear)
-explain how to choose a different watch directory.
+Pegline watches Spectacle's configured screenshot and recording folders.
+Screenshots and recordings share the eight-card history. MP4 and WebM clips
+appear as play-marked cards with their filenames; double-click opens your
+default player. Animated GIF and WebP captures keep their animation when
+copied or dragged. No additional video decoder is required by Pegline.
+
+Images support PNG, JPEG, WebP, BMP, GIF, and TIFF through installed Qt codecs.
+Hidden files, symlinks, empty files, and changing writes are ignored. Files
+moved or deleted elsewhere disappear from the line. Dismissal and capacity
+eviction keep originals. [Folder settings](docs/troubleshooting.md#screenshots-do-not-appear)
+explain how to choose different watch directories.
 
 ## Commands and startup
 
@@ -162,7 +168,7 @@ pegline --quit
 ```
 
 `pegline --help` lists options. `--status` returns JSON for troubleshooting;
-it includes local screenshot paths, so redact it before sharing.
+it includes local capture paths, so redact it before sharing.
 
 The enabled user service starts Pegline with your **graphical login session**.
 To manage it:

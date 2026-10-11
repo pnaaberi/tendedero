@@ -12,7 +12,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/data-control.h ${CMAKE_CUR
   COMMAND ${WAYLAND_SCANNER} client-header ${CMAKE_CURRENT_SOURCE_DIR}/ext-data-control-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/data-control.h
   COMMAND ${WAYLAND_SCANNER} private-code ${CMAKE_CURRENT_SOURCE_DIR}/ext-data-control-v1.xml ${CMAKE_CURRENT_BINARY_DIR}/data-control.c
   DEPENDS ext-data-control-v1.xml)
-add_library(pegline_ui STATIC panel.cpp pegline.cpp clipboard.cpp fileshare.cpp fileshare_card.cpp ${CMAKE_CURRENT_BINARY_DIR}/data-control.c)
+add_library(pegline_ui STATIC panel.cpp pegline.cpp clipboard.cpp fileshare.cpp fileshare_card.cpp media.cpp ${CMAKE_CURRENT_BINARY_DIR}/data-control.c)
 target_include_directories(pegline_ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(pegline_ui PUBLIC Qt6::Widgets Qt6::DBus Qt6::Network LayerShellQt::Interface KF6::GlobalAccel PkgConfig::WAYLAND)
 target_compile_options(pegline_ui PRIVATE -Wall -Wextra -Wpedantic)

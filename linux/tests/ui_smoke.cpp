@@ -1,5 +1,6 @@
 #include "../ui/panel.hpp"
 #include "../ui/fileshare.hpp"
+#include "../ui/media.hpp"
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QApplication>
@@ -12,6 +13,7 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QProcess>
 #include <QScreen>
 #include <QTemporaryDir>
 #include <QTest>
@@ -60,6 +62,127 @@ int main(int argc, char **argv) {
     QImage fixture(120, 80, QImage::Format_ARGB32);
     fixture.fill(QColor("#3266dc"));
     require(fixture.save(path), "create real PNG fixture");
+    if (app.arguments().contains("--videos")) {
+      // Only the container header is needed: cards preserve the original file,
+      // and playback is delegated to the user's video player.
+      QString clip = directory.filePath("fixture recording.mp4");
+      QFile video(clip);
+      require(video.open(QIODevice::WriteOnly), "create video fixture");
+      video.write(QByteArray::fromHex("000000186674797069736f6d0000020069736f6d69736f32"));
+      video.close();
+      QString webm = directory.filePath("fixture recording.webm");
+      QFile webmFile(webm);
+      require(webmFile.open(QIODevice::WriteOnly), "create WebM fixture");
+      webmFile.write(QByteArray::fromHex("1a45dfa39f4286810142f78101"));
+      webmFile.close();
+      require(isVideoCapture(webm) && !capturePreview(webm, QSize(156, 112)).isNull(), "WebM recording has a card");
+      QString animated = directory.filePath("fixture animation.gif");
+      QFile gif(animated);
+      require(gif.open(QIODevice::WriteOnly), "create animated GIF fixture");
+      const QByteArray gifFrame = QByteArray::fromHex("21f904000a0000002c0000000001000100000202440100");
+      gif.write(QByteArray::fromHex("47494638396101000100800000000000ffffff") + gifFrame + gifFrame + QByteArray::fromHex("3b"));
+      gif.close();
+      require(isVideoCapture(animated) && !capturePreview(animated, QSize(156, 112)).isNull(), "animated GIF recordings retain their media type");
+      QString animatedWebp = directory.filePath("fixture animation.webp");
+      QFile webp(animatedWebp);
+      require(webp.open(QIODevice::WriteOnly), "create animated WebP fixture");
+      // Two synthetic solid-colour frames, encoded by FFmpeg.
+      webp.write(QByteArray::fromBase64("UklGRsAAAABXRUJQVlA4WAoAAAACAAAADwAADwAAQU5JTQYAAAD/////AABBTk1GRAAAAAAAAAAAAA8AAA8AAOgDAAJWUDggLAAAAJABAJ0BKhAAEAACADQloAJ0ugADmAD++ZNv/5Af/5Af/5Af/yA/4hd7IDAAQU5NRkgAAAAAAAAAAAAPAAAPAADoAwAAVlA4IDAAAADUAQCdASoQABAAAAA0JaACdLoB+AADsAD+8Oj3/yC5YXXI1/8gP+QH/ID/+PIAAAA="));
+      webp.close();
+      require(isVideoCapture(animatedWebp) && !capturePreview(animatedWebp, QSize(156, 112)).isNull(), "animated WebP recordings retain their media type");
+      QString invalid = directory.filePath("invalid.webm");
+      QFile invalidFile(invalid);
+      require(invalidFile.open(QIODevice::WriteOnly), "create invalid capture fixture");
+      invalidFile.write("unfinished container");
+      invalidFile.close();
+      require(capturePreview(invalid, QSize(156, 112)).isNull(), "unrecognized video headers are retried instead of displayed");
+      require(isVideoCapture(clip) && !isVideoCapture(path), "distinguish clips from still images");
+      require(!capturePreview(clip, QSize(156, 112)).isNull(), "video has a lightweight preview");
+      require(capturePreview(directory.filePath("missing.webm"), QSize(156, 112)).isNull(), "missing clips are rejected");
+      PaintedPanel panel(app.primaryScreen());
+      if (QApplication::platformName() == "offscreen")
+        panel.resize(1280, 210); // Representative logical desktop width at 1× and 2×.
+      FileShare share(QUrl("https://example.invalid"), directory.filePath("receipts.json"));
+      panel.setFileShare(&share);
+      panel.show();
+      panel.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
+      require(!panel.isRevealed(), "existing capture history stays hidden");
+      QJsonArray captures{QJsonObject{{"path", clip}, {"modified", "2"}, {"new", true}},
+                          QJsonObject{{"path", path}, {"modified", "1"}}};
+      panel.setItems(captures);
+      require(panel.isRevealed() && panel.isFlying(), "a new recording flies onto the line");
+      QTest::qWait(900);
+      require(!panel.isFlying() && !panel.cardRect(0).isEmpty() && !panel.cardRect(1).isEmpty(), "recording and screenshot coexist");
+      require(panel.action("copy", clip), "video copy succeeds");
+      if (QApplication::platformName() != "wayland") {
+        auto mime = QApplication::clipboard()->mimeData();
+        require(mime->urls() == QList<QUrl>{QUrl::fromLocalFile(clip)} && !mime->hasImage() && !mime->hasFormat("image/png"),
+                "copy preserves the original clip instead of a still frame");
+      } else {
+        auto paste = [&](QStringList args) {
+          QProcess process;
+          process.start("wl-paste", args);
+          require(process.waitForStarted(), "start Wayland clipboard reader");
+          QElapsedTimer timeout;
+          timeout.start();
+          while (process.state() != QProcess::NotRunning && timeout.elapsed() < 5000)
+            QTest::qWait(10);
+          require(process.state() == QProcess::NotRunning && process.exitCode() == 0, "Wayland clipboard reader finishes");
+          return process.readAllStandardOutput();
+        };
+        const auto formats = paste({"--list-types"});
+        require(formats.contains("text/uri-list") && !formats.contains("image/png"), "Wayland offers the video file without a PNG frame");
+        require(paste({"--no-newline", "--type", "text/uri-list"}).trimmed() == QUrl::fromLocalFile(clip).toEncoded(), "Wayland transfers the exact original video URI");
+      }
+      QString operation, operatedPath;
+      panel.onAction = [&](QString op, QString file) { operation = op; operatedPath = file; };
+      require(!panel.action("annotate", clip) && operation.isEmpty(), "video cannot be passed to the image editor");
+      QTest::mouseDClick(&panel, Qt::LeftButton, Qt::NoModifier, panel.cardRect(0).center());
+      require(operation == "open" && operatedPath == clip, "double click opens the original recording");
+      // Injected Qt mouse events have no compositor input serial for a Wayland
+      // popup grab. Exercise the native menu on the offscreen test platform.
+      if (QApplication::platformName() != "wayland") {
+        bool videoMenu = false;
+        QTimer::singleShot(100, [&] {
+          auto menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+          require(menu, "video context menu opens");
+          QStringList labels;
+          for (auto action : menu->actions()) labels << action->text();
+          videoMenu = labels.contains("Copy video") && labels.contains("Play") &&
+                      labels.contains("Save a copy to Videos") && !labels.contains("Annotate in Spectacle");
+          menu->close();
+        });
+        QTest::mouseClick(&panel, Qt::RightButton, Qt::NoModifier, panel.cardRect(0).center());
+        require(videoMenu, "video actions match the media type");
+      }
+      QMimeData mime;
+      mime.setUrls({QUrl::fromLocalFile(clip), QUrl::fromLocalFile(path)});
+      QDragEnterEvent enter(panel.fileShareRect().center(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &enter);
+      require(enter.isAccepted(), "FileShare accepts mixed video and screenshot batches");
+      QString render = qEnvironmentVariable("PEGLINE_TEST_RENDER");
+      if (!render.isEmpty()) require(panel.renderFrame().save(render), "save synthetic capture cards for visual review");
+      panel.setRevealed(false, false);
+      panel.setItems(captures);
+      require(!panel.isRevealed(), "unchanged recording does not reveal again");
+      require(panel.action("copy", path), "still image copy remains available");
+      if (QApplication::platformName() != "wayland")
+        require(QApplication::clipboard()->mimeData()->hasImage(), "still images keep image clipboard formats");
+      panel.setItems(QJsonArray{QJsonObject{{"path", animated}, {"modified", "3"}}});
+      require(panel.action("copy", animated), "animated recordings can be copied");
+      if (QApplication::platformName() != "wayland")
+        require(!QApplication::clipboard()->mimeData()->hasImage() &&
+                QApplication::clipboard()->mimeData()->urls() == QList<QUrl>{QUrl::fromLocalFile(animated)},
+                "animated recording is never flattened on the clipboard");
+      panel.setItems(QJsonArray{QJsonObject{{"path", animatedWebp}, {"modified", "4"}}});
+      require(panel.action("copy", animatedWebp), "animated WebP can be copied");
+      if (QApplication::platformName() != "wayland")
+        require(!QApplication::clipboard()->mimeData()->hasImage() &&
+                QApplication::clipboard()->mimeData()->urls() == QList<QUrl>{QUrl::fromLocalFile(animatedWebp)},
+                "animated WebP is never flattened on the clipboard");
+      std::cout << "Video card checks passed\n";
+      return 0;
+    }
     if (app.arguments().contains("--fileshare")) {
       FileShare share(QUrl("https://example.invalid"), directory.filePath("receipts.json"));
       PaintedPanel panel(app.primaryScreen());

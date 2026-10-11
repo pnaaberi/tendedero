@@ -196,3 +196,30 @@ suppression, cancellation, receipt validation and correct-file copy actions.
 Physical file-manager variations, assistive technology and a live multi-screen
 hotplug during a transfer were not separately exercised. The existing shared
 controller owns the upload queue independently of screen-panel lifetime.
+
+# Spectacle recordings follow-up — 11 October 2026
+
+Spectacle screenshots and recordings now share the eight-card shelf. MP4 and
+WebM use lightweight play-marked filename cards; animated GIF/WebP preserve the
+original media on copy and drag. Recording copies run outside the GUI thread.
+
+- Nineteen Rust filesystem tests passed, including separate folder settings,
+  growing files, quiet restoration, symlink-root outages, and changing watch
+  scope without exposing unrelated history.
+- Native core, motion, arrival, FileShare card/client, and video checks passed.
+  Video checks include GIF/WebP preservation, menu actions, annotation
+  rejection, mixed-file drag acceptance, and original URI clipboard formats.
+- Real Wayland clipboard checks passed through `wl-paste`. Menu event injection
+  is tested offscreen because synthetic Qt events lack compositor input serials.
+  Synthetic card renders were reviewed at normal and double scale.
+- An isolated D-Bus run used real synthetic MP4/WebM/WebP files to verify
+  ingestion, quiet restart, dismissal, exact copied bytes, CLI overrides, and
+  responsiveness while a deliberately slow copy was in progress.
+- Formatting, Clippy, and the release build passed. The installed Wayland
+  service matches the release binary, starts hidden, resolves both configured
+  Spectacle folders, and reports no watcher errors or warnings.
+
+The previous binary and state, test media, and raw evidence remain outside the
+repository. These checks did not record personal desktop content or exercise a
+physical Spectacle recording gesture; ingestion was tested with synthetic saved
+recordings. No new runtime dependency was added.

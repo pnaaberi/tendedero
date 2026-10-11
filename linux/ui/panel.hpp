@@ -47,6 +47,7 @@ private:
   struct Card {
     QString path, stamp;
     QImage image;
+    bool video = false;
     qint64 nudgedAt = 0;
     qreal nudgeStrength = 0;
   };
