@@ -62,18 +62,27 @@ int main(int argc, char **argv) {
     require(fixture.save(path), "create real PNG fixture");
     if (app.arguments().contains("--fileshare")) {
       FileShare share(QUrl("https://example.invalid"), directory.filePath("receipts.json"));
-      Panel panel(app.primaryScreen());
+      PaintedPanel panel(app.primaryScreen());
       panel.setFileShare(&share);
       panel.show();
-      panel.setRevealed(false, false);
-      QRect card = panel.fileShareRect();
-      require(!card.isEmpty() && panel.mask().contains(card.center()), "utility card stays interactive when shelf hidden");
-      require(panel.renderFrame().pixelColor(card.center() * panel.devicePixelRatio()).alpha() > 0,
-              "utility card remains visible when hidden");
-      require(!panel.mask().contains(QPoint(10, 100)), "surrounding space remains click through");
+      require(panel.fileShareRect().isEmpty(), "FileShare starts hidden with the shelf");
+      QRegion hiddenInput = panel.mask();
+      QImage hiddenFrame = panel.renderFrame();
       panel.setItems(QJsonArray{QJsonObject{{"path", path}, {"modified", "1"}}});
       panel.setRevealed(true, false);
+      QRect card = panel.fileShareRect();
+      require(!card.isEmpty() && panel.mask().contains(card.center()), "revealing the shelf also reveals FileShare");
+      require(panel.renderFrame().pixelColor(card.center() * panel.devicePixelRatio()).alpha() > 0,
+              "revealed utility card is painted");
+      require(!panel.mask().contains(QPoint(10, 100)), "surrounding space remains click through");
       require(!card.intersects(panel.cardRect(0)), "screenshots reserve the utility slot");
+      int screenshotY = panel.cardRect(0).top();
+      // Changing the private hostname must not change the card's visible text.
+      QImage originalCard = panel.renderFrame();
+      FileShare other(QUrl("https://other.invalid"), directory.filePath("other-receipts.json"));
+      panel.setFileShare(&other);
+      require(panel.renderFrame() == originalCard, "the private hostname is absent from the card");
+      panel.setFileShare(&share);
       panel.setCaptureSuppressed(true);
       require(!panel.mask().contains(card.center()), "capture suppression removes utility input");
       require(panel.renderFrame().pixelColor(card.center() * panel.devicePixelRatio()).alpha() == 0,
@@ -88,6 +97,43 @@ int main(int argc, char **argv) {
       QDragEnterEvent remote(card.center(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
       QCoreApplication::sendEvent(&panel, &remote);
       require(!remote.isAccepted(), "remote URLs cannot be dropped");
+      panel.setRevealed(false, false);
+      panel.refreshFileShare();
+      require(panel.fileShareRect().isEmpty() && panel.mask() == hiddenInput &&
+              panel.renderFrame() == hiddenFrame, "hidden FileShare has no pixels or input, even after a status refresh");
+      mime.setUrls({QUrl::fromLocalFile(path)});
+      QDragEnterEvent hiddenDrop(card.center(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &hiddenDrop);
+      require(!hiddenDrop.isAccepted(), "hidden card rejects file drags");
+      QTest::qWait(100);
+      int frames = panel.frames;
+      QTest::qWait(200);
+      require(panel.frames == frames, "configured FileShare does not animate while hidden");
+      panel.setRevealed(true);
+      QElapsedTimer reveal;
+      reveal.start();
+      int highestY = card.top(), lowestY = card.top();
+      while (reveal.elapsed() < 600) {
+        QTest::qWait(20);
+        QRect moving = panel.fileShareRect();
+        if (!moving.isEmpty()) {
+          highestY = std::min(highestY, moving.top());
+          lowestY = std::max(lowestY, moving.top());
+          require(std::abs((moving.top() - card.top()) -
+                           (panel.cardRect(0).top() - screenshotY)) <= 8,
+                  "FileShare descends alongside the screenshot shelf");
+        }
+      }
+      require(highestY < card.top() - 20 && lowestY > card.top() + 3 &&
+              panel.fileShareRect() == card, "FileShare slides down, overshoots and settles with the shelf");
+      panel.setRevealed(false);
+      QTest::qWait(250);
+      require(panel.fileShareRect().isEmpty() && panel.mask() == hiddenInput &&
+              panel.renderFrame() == hiddenFrame, "normal hide animation hides FileShare completely");
+      QDragEnterEvent trigger(QPoint(panel.width() / 2, 2), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+      QCoreApplication::sendEvent(&panel, &trigger);
+      require(trigger.isAccepted() && panel.isRevealed(), "dragging files onto the normal marker reveals the drop area");
+      panel.setRevealed(false, false);
       std::cout << "FileShare card checks passed\n";
       return 0;
     }

@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QTimer>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -32,9 +33,17 @@ bool FileShare::validEndpoint(const QUrl &url) {
 }
 
 bool FileShare::accepts(const QList<QUrl> &urls) {
-  return !urls.isEmpty() && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) {
+  return !urls.isEmpty() && urls.size() <= 100 && std::all_of(urls.begin(), urls.end(), [](const QUrl &url) {
     return url.isLocalFile() && url.host().isEmpty() && regular(url.toLocalFile());
   });
+}
+
+bool FileShare::canEnqueue(const QList<QUrl> &urls) const {
+  if (!enabled() || !accepts(urls)) return false;
+  QSet<QString> paths(pending.begin(), pending.end());
+  if (active) paths.insert(activePath);
+  for (const auto &url : urls) paths.insert(url.toLocalFile());
+  return paths.size() + (busy() ? completed.size() : 0) <= 100;
 }
 
 FileShare::FileShare(QUrl endpoint, QString history, QObject *parent)
@@ -51,6 +60,8 @@ FileShare::FileShare(QUrl endpoint, QString history, QObject *parent)
   }
   if (!recent.isEmpty()) {
     confirmed = recent.first().toObject();
+    completed.append(confirmed);
+    total = 1;
     activeName = confirmed["original_name"].toString();
     label = "Uploaded";
   }
@@ -69,8 +80,8 @@ void FileShare::changed() {
 }
 
 void FileShare::enqueue(const QList<QUrl> &urls) {
-  if (!enabled() || !accepts(urls) || pending.size() + urls.size() > 100) {
-    description = "Choose regular local files from 1 byte to 4 GiB (up to 100 queued).";
+  if (!canEnqueue(urls)) {
+    description = "Choose regular local files from 1 byte to 4 GiB (up to 100 per batch).";
     if (!active) {
       label = "Cannot upload";
       confirmed = {};
@@ -79,10 +90,16 @@ void FileShare::enqueue(const QList<QUrl> &urls) {
     changed();
     return;
   }
+  if (!busy()) {
+    completed = {};
+    total = 0;
+  }
   for (const auto &url : urls) {
     QString path = url.toLocalFile();
-    if ((!active || path != file.fileName()) && !pending.contains(path))
+    if ((!active || path != activePath) && !pending.contains(path)) {
       pending.enqueue(path);
+      ++total;
+    }
   }
   if (!active) next();
   else changed();
@@ -90,7 +107,8 @@ void FileShare::enqueue(const QList<QUrl> &urls) {
 
 void FileShare::next() {
   if (active || pending.isEmpty()) return;
-  file.setFileName(pending.dequeue());
+  activePath = pending.dequeue();
+  file.setFileName(activePath);
   activeName = QFileInfo(file.fileName()).fileName();
   confirmed = {};
   active = true;
@@ -171,6 +189,7 @@ void FileShare::post(const QByteArray &csrf) {
         receipt["size"].toInteger() == file.size()) {
       receipt["original_name"] = activeName;
       confirmed = receipt;
+      completed.append(receipt);
       recent.prepend(receipt);
       while (recent.size() > historyLimit) recent.removeLast();
       saveHistory();

@@ -71,13 +71,14 @@ private:
   qint64 flexAt = 0;
   qreal flexStrength = 0;
   QPointer<FileShare> fileShare;
-  bool captureSuppressed = false, uploadHover = false, uploadPressed = false;
-  QString shareCopyFeedback;
+  bool captureSuppressed = false, uploadHover = false, uploadPressed = false, uploadRejected = false;
+  QString shareCopyFeedback, uploadDropTitle, uploadDropDetail;
   QTransform fileShareTransform() const;
   bool fileShareAt(QPointF point) const;
   void paintFileShare(QPainter &painter) const;
   bool fileShareEvent(QEvent *event);
   void fileShareMenu(QPoint position);
+  void chooseFileShare();
   void copyFileShare(const QString &text);
   QRect sensor() const;
   bool overSensor(QPointF point) const;

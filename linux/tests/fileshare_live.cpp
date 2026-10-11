@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
     share.onChanged = [&] { panel.refreshFileShare(); };
     panel.show();
     require(QTest::qWaitForWindowExposed(&panel), "native panel exposed");
+    panel.setRevealed(true, false);
     QMimeData mime;
     mime.setUrls({QUrl::fromLocalFile(fixture.fileName())});
     auto center = panel.fileShareRect().center();
@@ -61,7 +62,7 @@ int main(int argc, char **argv) {
     reply->deleteLater();
     for (const auto &key : {QString("download_url"), QString("stored_path")}) {
       auto box = panel.fileShareRect();
-      QPoint click(box.left() + (key == "download_url" ? 43 : 126), box.top() + 93);
+      QPoint click(box.left() + (key == "download_url" ? box.width() / 4 : box.width() * 3 / 4), box.bottom() - 14);
       QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, click);
       QProcess paste;
       paste.start("wl-paste", {"--no-newline", "--type", "text/plain"});

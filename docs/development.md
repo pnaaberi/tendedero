@@ -79,8 +79,12 @@ animation work. It is included in `check-ui.sh`.
 The FileShare checks run a local HTTP fixture and test raw streamed uploads,
 Origin/CSRF/filename headers, validated receipt persistence, rejected and
 uncertain responses, cancellation and stale-copy prevention. Native card checks
-cover persistence while the shelf is hidden, screenshot-slot separation,
-capture suppression, click-through and Copy-only file-drag acceptance.
+cover shared shelf reveal/hide animation, a quiet hidden card, concealed
+hostnames, screenshot-slot separation, capture suppression and click-through.
+The local fixture exercises real Qt multi-file drop events, adding to a batch,
+duplicate prevention, partial failure, cancellation, background completion and
+copying the batch's links/paths. Optional `PEGLINE_TEST_RENDER_DIR` saves only
+synthetic card renders from that fixture for visual review.
 
 The explicit live integration check creates one harmless text upload and uses
 the real Wayland clipboard. It injects native Qt drop/mouse events; compositor

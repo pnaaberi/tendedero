@@ -94,13 +94,19 @@ Pictures folder and a unique filename; existing files are never overwritten.
 ### FileShare uploads
 
 Choose **Configure FileShare…** in the tray menu and enter your private
-FileShare HTTPS address. A small FileShare card stays hanging at the right of
-each screen, including while the screenshot shelf is hidden. Drop regular
-local files onto it to upload immediately, or use its menu to choose files.
+FileShare HTTPS address. A FileShare card drops down at the right of each screen
+with the normal Pegline shelf and hides with it. Its dashed target and file
+icon accept one or many local files; click it to choose files. Dragging files
+over the normal top-center marker also reveals the shelf. The private server
+address is never displayed on the card.
 You can also drag a screenshot card onto FileShare. The utility card does not
 use one of the eight screenshot slots and hides during Pegline captures.
 
-Transfers run sequentially, with progress and **Cancel uploads** on the card.
+Before dropping, the target shows the selection's file count and total size.
+Transfers run sequentially, with the current file, batch position, progress
+and a cancel action on the card. You can add files while a batch runs (up to
+100 files per batch); repeats already uploading or queued are skipped.
+Uploads continue in the background when the shelf is hidden.
 Files must contain 1 byte–4 GiB; directories, symlinks and remote URLs are
 rejected. Dropping copies file bytes and always retains the original. Cancelling
 or losing the connection after transmission starts leaves reception uncertain:
@@ -108,6 +114,10 @@ check the upload page before retrying. A failure stops the remaining batch.
 
 After a confirmed upload, **Copy link** copies the private download URL and
 **Copy path** copies the exact path on the server for an agent running there.
+For a completed batch, **Copy links / Copy paths** copy all its confirmed
+results, one per line in upload order. If a batch stops partway, the card
+identifies the stopped file. Its right-click menu can copy all confirmed batch
+results, and also provides individually named recent uploads.
 Older successful results remain in the card's menu, labelled by filename; ten
 recent receipts survive restart. Links require the FileShare owner's permitted
 Tailscale identity. Uploaded files remain untrusted and are retrieved as

@@ -168,9 +168,9 @@ those copies. Raw audit reports remain local. New public changes must follow
 the [publication checks](../development.md#changes-and-publication).
 # FileShare follow-up — 11 October 2026
 
-The optional persistent FileShare card is implemented and installed locally.
+The optional FileShare card is implemented and installed locally.
 Its endpoint is configured outside the repository. Verified the shared upload
-client, owner-only download route, hidden-shelf card/input region, capture
+client, owner-only download route, shared shelf reveal/hide and input region, capture
 suppression, cancellation, receipt validation and correct-file copy actions.
 
 - Rust store tests: 12 passed; native core, motion, arrival, FileShare card
@@ -183,6 +183,15 @@ suppression, cancellation, receipt validation and correct-file copy actions.
 - Reviewed the card's own render. Synthetic remote test files/receipts were
   removed; normal source files were retained. Server rollback source and the
   prior installed Pegline executable are retained privately.
+- Follow-up UX: dashed file-drop target, concealed hostname, count/size preview,
+  batch position and copying all confirmed links/paths. Synthetic card renders
+  checked at idle, drag, queue, completion, invalid selection and partial failure.
+- Local HTTP fixture exercised native multi-file drop events, adding files
+  mid-transfer, duplicate prevention, background completion, cancellation and
+  invalid batches. An eleven-success/one-failure case verified that the failed
+  filename remains identifiable and every confirmed result can still be copied.
+  These client/card checks passed offscreen and on Wayland with real clipboard
+  transfers; shared visibility also passed at 2× scale.
 
 Physical file-manager variations, assistive technology and a live multi-screen
 hotplug during a transfer were not separately exercised. The existing shared

@@ -65,7 +65,7 @@ Panel::Panel(QScreen *output) {
   captureTimer.setTimerType(Qt::PreciseTimer);
   captureTimer.setInterval(10000);
   QObject::connect(&captureTimer, &QTimer::timeout, this, [this] {
-    if (dragging || currentMenu || !pressed.isEmpty())
+    if (dragging || currentMenu || uploadHover || uploadPressed || !pressed.isEmpty())
       captureTimer.start(1000);
     else
       setRevealed(false);
@@ -206,6 +206,9 @@ void Panel::setRevealed(bool value, bool animate) {
     return;
   bool opening = value && !revealed && animate;
   if (!value) {
+    uploadHover = false;
+    uploadRejected = false;
+    uploadPressed = false;
     flexStrength = 0;
     for (auto &card : cards)
       card.nudgeStrength = 0;
@@ -218,7 +221,7 @@ void Panel::setRevealed(bool value, bool animate) {
   if (opening)
     for (const auto &card : cards)
       nudge(card.path, 9);
-  if (value || (fileShare && fileShare->enabled() && !captureSuppressed))
+  if (value)
     breezeTimer.start();
   else
     breezeTimer.stop();
@@ -303,7 +306,7 @@ QTransform Panel::cardTransform(int index) const {
 QRect Panel::cardRect(int index) const {
   if (index < 0 || index >= cards.size())
     return {};
-  qreal available = width() - (fileShare && fileShare->enabled() ? 206 : 0);
+  qreal available = width() - (fileShare && fileShare->enabled() ? 244 : 0);
   qreal spacing =
       std::min(174.0, (available - 48.0) / std::max(1, int(cards.size())));
   qreal x = available / 2.0 + (index - (cards.size() - 1) / 2.0) * spacing;
@@ -361,7 +364,6 @@ QImage Panel::renderFrame() const {
   QPainter painter(&frame);
   painter.setRenderHint(QPainter::Antialiasing);
   painter.fillRect(sensor(), QColor(119, 203, 171, 170));
-  paintFileShare(painter);
   if (progress < .01)
     return frame;
   painter.setOpacity(std::clamp(progress, qreal(0), qreal(1)));
@@ -378,8 +380,11 @@ QImage Panel::renderFrame() const {
   painter.setPen(QPen(gradient, 1.5));
   painter.drawPath(rope);
   painter.restore();
+  paintFileShare(painter);
   if (cards.isEmpty()) {
-    QRect hint(width() / 2 - 230, 62 - int((1 - progress) * 215), 460, 35);
+    int available = width() - (fileShare && fileShare->enabled() ? 244 : 0);
+    int hintWidth = std::min(460, std::max(0, available - 24));
+    QRect hint((available - hintWidth) / 2, 62 - int((1 - progress) * 215), hintWidth, 35);
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(25, 36, 35, 230));
     painter.drawRoundedRect(hint, 17, 17);

@@ -1,7 +1,7 @@
 # FileShare Implementation Plan
 
 **Goal:** Drop files onto Pegline and copy an owner-private download link/path.
-**Architecture:** Qt upload queue plus persistent panel card; exact-ID owner
+**Architecture:** Qt upload queue plus shelf panel card; exact-ID owner
 download endpoint in the existing Python FileShare server.
 **Spec:** ../specs/2026-10-11-fileshare-design.md
 **Execution:** Inline, following the user's instruction to implement.
@@ -57,3 +57,9 @@ Independent review found one important issue: copy actions could reference
 the preceding successful file after a new failure. Fixed by retaining an
 explicit current confirmed receipt; failure/cancellation regression checks
 and the complete suite passed. Older receipts remain in the named menu.
+
+Follow-up request: hide FileShare by default with the normal shelf and conceal
+the hostname. Use the shared slide animation and a dashed visual drop target;
+show selection size/count and sequential batch progress, and copy all confirmed
+batch links/paths. Add native multi-file drop, duplicate, partial-failure,
+cancel, hidden-background completion and batch-copy regression checks.

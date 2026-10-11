@@ -1,6 +1,6 @@
 # Pegline FileShare
 
-Approved in conversation: a persistent hanging upload card, immediate upload on
+Approved in conversation: a hanging upload card, immediate upload on
 drop, progress/cancel, and copying either an owner-private download URL or the
 exact receiving-machine path. Support local files and screenshot-card drags.
 
@@ -12,10 +12,13 @@ nonregular, symlink, remote-URL and >4 GiB inputs fail before transmission.
 Interrupted transmissions remain uncertain and never retry automatically.
 Keep a bounded recent receipt list in private local state; copy only on click.
 
-The utility card remains visible with screenshots hidden, uses a fixed slot
-outside their eight-item capacity, accepts only Copy drops, and suppresses
-itself during Spectacle capture. Menus provide file selection, recent results,
-cancel and the upload page. Share one queue across screens.
+The utility card follows the screenshot shelf's reveal/hide animation, uses
+a fixed slot outside their eight-item capacity, accepts only Copy drops, and
+suppresses itself during Spectacle capture. Its dashed drop area shows a file
+icon, selection count/size and batch progress; the hostname stays concealed.
+Completed batches can copy all links/paths in upload order. Menus provide
+recent individual results, cancel and the upload page. Share one queue across
+screens; transfers continue while the shelf is hidden.
 
 FileShare adds GET/HEAD /api/uploads/<exact-id>/download, restricted to the
 same configured owner and trusted Serve boundary as its upload page. Validate

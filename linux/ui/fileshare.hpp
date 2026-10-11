@@ -14,6 +14,7 @@ public:
   explicit FileShare(QUrl endpoint, QString historyPath, QObject *parent = nullptr);
   static bool validEndpoint(const QUrl &url);
   static bool accepts(const QList<QUrl> &urls);
+  bool canEnqueue(const QList<QUrl> &urls) const;
   void enqueue(const QList<QUrl> &urls);
   void cancel();
   bool busy() const { return active || !pending.isEmpty(); }
@@ -24,6 +25,8 @@ public:
   QString name() const { return activeName; }
   int progress() const { return percent; }
   int queued() const { return pending.size(); }
+  int batchTotal() const { return total; }
+  QJsonArray batchReceipts() const { return completed; }
   QJsonArray receipts() const { return recent; }
   QJsonObject currentReceipt() const { return confirmed; }
   std::function<void()> onChanged;
@@ -36,9 +39,11 @@ private:
   QFile file;
   QQueue<QString> pending;
   QJsonArray recent;
+  QJsonArray completed;
   QJsonObject confirmed;
-  QString label = "Drop to upload", description, activeName;
+  QString label = "Drop to upload", description, activeName, activePath;
   int percent = -1;
+  int total = 0;
   bool active = false, posting = false;
   void next();
   void post(const QByteArray &csrf);
