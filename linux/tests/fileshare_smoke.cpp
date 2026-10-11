@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "test HTTP listener");
     QUrl base(QString("http://127.0.0.1:%1").arg(server.serverPort()));
-    int posts = 0;
+    int posts = 0, requests = 0;
     int rejectPost = -1;
     QStringList receivedNames;
     QList<QByteArray> receivedBodies;
@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
               length = line.mid(15).trimmed().toLongLong();
           if (data.size() - end - 4 < length) return;
           socket->setProperty("handled", true);
+          ++requests;
           QByteArray response;
           int status = 200;
           if (data.startsWith("GET /upload.html ")) {
@@ -237,10 +238,76 @@ int main(int argc, char **argv) {
     int beforeCancel = posts;
     share.enqueue(batch);
     require(QTest::qWaitFor([&] { return posts == beforeCancel + 1; }, 4000), "queued cancellation reaches first POST");
+    const auto busyHistory = share.receipts();
+    require(!share.canClear() && !share.clearHistory() && share.busy() && share.queued() == 2 &&
+            share.receipts() == busyHistory, "clearing cannot interrupt an upload or discard its queued files");
     share.cancel();
     QTest::qWait(100);
     require(posts == beforeCancel + 1 && !share.busy() && share.queued() == 0, "cancel stops active upload and clears the batch");
     render("cancelled");
+    int beforeClear = requests;
+    bool clearedFromMenu = false;
+    QTimer::singleShot(0, [&] {
+      auto menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+      if (!menu) return;
+      for (auto action : menu->actions()) {
+        if (action->text() == "Clear history" && action->isEnabled()) {
+          action->trigger();
+          clearedFromMenu = true;
+        }
+      }
+      menu->close();
+    });
+    QTest::mouseClick(&panel, Qt::RightButton, Qt::NoModifier, panel.fileShareRect().center());
+    require(clearedFromMenu, "card menu can clear local upload history");
+    require(share.receipts().isEmpty() && share.batchReceipts().isEmpty() && share.currentReceipt().isEmpty() &&
+            share.batchTotal() == 0 && share.name().isEmpty() && share.detail().isEmpty() &&
+            share.status() == "Drop to upload", "clearing resets receipts, failed batch details and card contents");
+    FileShare cleared(base, history);
+    require(cleared.receipts().isEmpty() && cleared.currentReceipt().isEmpty(), "cleared contents stay empty after restart");
+    QTest::qWait(20);
+    require(share.enabled() && share.endpoint() == base && requests == beforeClear && !share.canClear(),
+            "clearing retains settings and sends no server requests");
+    render("cleared");
+    stall = false;
+    dropFiles({batch[0], batch[1]}, "after-clear-drop");
+    require(QTest::qWaitFor([&] { return !share.busy(); }, 4000) && share.batchTotal() == 2 &&
+            share.batchReceipts().size() == 2, "new uploads work after clearing with fresh batch counts");
+    render("clear-button");
+    const auto beforeInaccessible = share.receipts();
+    const auto folderPermissions = QFileInfo(temp.path()).permissions();
+    require(QFile::exists(history) && QFile::setPermissions(temp.path(), {}), "hide persisted history behind inaccessible folder");
+    // Privileged test runners may still traverse a directory without permissions.
+    const bool inaccessible = !QFileInfo::exists(history);
+    const bool clearedInaccessible = inaccessible && share.clearHistory();
+    require(QFile::setPermissions(temp.path(), folderPermissions), "restore fixture folder permissions");
+    require(!clearedInaccessible && share.receipts() == beforeInaccessible && QFile::exists(history),
+            "inaccessible history must not report a successful clear or discard in-memory results");
+    auto clearButton = [&] {
+      const QRect box = panel.fileShareRect();
+      return QPoint(box.right() - 31, box.top() + 23);
+    };
+    // A press that leaves the control must not accidentally clear the results.
+    QTest::mousePress(&panel, Qt::LeftButton, Qt::NoModifier, clearButton());
+    QTest::mouseRelease(&panel, Qt::LeftButton, Qt::NoModifier, panel.fileShareRect().center());
+    require(share.canClear() && share.receipts().size() == 2, "dragging off Clear leaves history intact");
+    beforeClear = requests;
+    QTest::mouseClick(&panel, Qt::LeftButton, Qt::NoModifier, clearButton());
+    require(!share.canClear() && share.receipts().isEmpty() && share.currentReceipt().isEmpty(),
+            "visible Clear button resets a successful batch");
+    FileShare clearedAgain(base, history);
+    require(clearedAgain.receipts().isEmpty() && requests == beforeClear, "button clearing persists without network traffic");
+    render("cleared-button");
+
+    const QString blockedHistory = temp.filePath("history-is-a-directory");
+    require(QDir().mkpath(blockedHistory), "create unwritable history target");
+    FileShare blocked(base, blockedHistory);
+    blocked.enqueue({batch[0]});
+    require(QTest::qWaitFor([&] { return !blocked.busy(); }, 4000) && !blocked.currentReceipt().isEmpty(),
+            "upload remains usable if local history cannot be saved");
+    const auto retained = blocked.receipts();
+    require(!blocked.clearHistory() && blocked.receipts() == retained && !blocked.currentReceipt().isEmpty(),
+            "failed persistent clear keeps current results available");
     require(QFile::exists(file.fileName()), "uploads never remove originals");
     std::cout << "FileShare client checks passed\n";
     return 0;

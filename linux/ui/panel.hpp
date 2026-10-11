@@ -74,9 +74,12 @@ private:
   qreal flexStrength = 0;
   QPointer<FileShare> fileShare;
   bool captureSuppressed = false, uploadHover = false, uploadPressed = false, uploadRejected = false;
+  bool uploadClearPressed = false;
   QString shareCopyFeedback, uploadDropTitle, uploadDropDetail;
   QTransform fileShareTransform() const;
   bool fileShareAt(QPointF point) const;
+  QRect fileShareClearRect() const;
+  void clearFileShare();
   void paintFileShare(QPainter &painter) const;
   bool fileShareEvent(QEvent *event);
   void fileShareMenu(QPoint position);

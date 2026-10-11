@@ -127,6 +127,10 @@ recent receipts survive restart. Links require the FileShare owner's permitted
 Tailscale identity. Uploaded files remain untrusted and are retrieved as
 attachments, separately from FileShare's published catalogue.
 
+Click **Clear** on the card or choose **Clear history** in its right-click menu
+to reset the card and remove its saved links. Uploaded files stay on the server.
+Finish or cancel an active upload before clearing.
+
 Settings live in `$XDG_CONFIG_HOME/pegline/fileshare.ini` (normally
 `~/.config/pegline/fileshare.ini`), with a `url` key under `[General]`. Private
 receipt history lives in `$XDG_STATE_HOME/pegline/uploads.json` (normally

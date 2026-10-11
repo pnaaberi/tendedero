@@ -17,6 +17,8 @@ public:
   bool canEnqueue(const QList<QUrl> &urls) const;
   void enqueue(const QList<QUrl> &urls);
   void cancel();
+  bool clearHistory();
+  bool canClear() const { return !busy() && (!recent.isEmpty() || total > 0 || !description.isEmpty()); }
   bool busy() const { return active || !pending.isEmpty(); }
   bool enabled() const { return validEndpoint(base); }
   QUrl endpoint() const { return base; }

@@ -100,7 +100,9 @@ cover shared shelf reveal/hide animation, a quiet hidden card, concealed
 hostnames, screenshot-slot separation, capture suppression and click-through.
 The local fixture exercises real Qt multi-file drop events, adding to a batch,
 duplicate prevention, partial failure, cancellation, background completion and
-copying the batch's links/paths. Optional `PEGLINE_TEST_RENDER_DIR` saves only
+copying the batch's links/paths. Clear-button and menu checks cover persistent
+history removal, busy-upload protection, disk errors and uploading again after
+clearing, without server requests. Optional `PEGLINE_TEST_RENDER_DIR` saves only
 synthetic card renders from that fixture for visual review.
 
 The explicit live integration check creates one harmless text upload and uses

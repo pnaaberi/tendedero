@@ -61,6 +61,23 @@ bool Panel::fileShareAt(QPointF point) const {
       fileShareRect().contains(fileShareTransform().inverted().map(point).toPoint());
 }
 
+QRect Panel::fileShareClearRect() const {
+  const QRect box = fileShareRect();
+  if (box.isEmpty() || !fileShare->canClear()) return {};
+  return QRect(box.right() - 53, box.top() + 11, 44, 24);
+}
+
+void Panel::clearFileShare() {
+  if (!fileShare || !fileShare->canClear()) return;
+  if (!fileShare->clearHistory()) {
+    if (onError) onError("Could not clear FileShare history. Check that the local state folder is writable.");
+    return;
+  }
+  uploadHover = false;
+  uploadRejected = false;
+  refreshFileShare();
+}
+
 void Panel::paintFileShare(QPainter &p) const {
   QRect box = fileShareRect();
   if (box.isEmpty()) return;
@@ -91,7 +108,15 @@ void Panel::paintFileShare(QPainter &p) const {
   QString badge = fileShare->busy() ? QString("%1 / %2").arg(std::min(completed + 1, total)).arg(total) :
       warning && !fileShare->name().isEmpty() && total > 1 ? QString("%1 / %2").arg(completed).arg(total) :
       !fileShare->currentReceipt().isEmpty() && total > 1 ? QString("%1 files").arg(completed) : "PRIVATE";
-  p.drawText(box.adjusted(100, 12, -12, -114), Qt::AlignRight | Qt::AlignVCenter, badge);
+  const QRect clear = fileShareClearRect();
+  p.drawText(box.adjusted(90, 12, clear.isEmpty() ? -12 : -60, -114), Qt::AlignRight | Qt::AlignVCenter, badge);
+  if (!clear.isEmpty()) {
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#dce9df"));
+    p.drawRoundedRect(clear.adjusted(0, 1, 0, -1), 4, 4);
+    p.setPen(accent);
+    p.drawText(clear, Qt::AlignCenter, "Clear");
+  }
 
   QRect zone(box.left() + 10, box.top() + 40, box.width() - 20, 72);
   p.setPen(QPen(tone, uploadHover || uploadRejected ? 2 : 1, Qt::DashLine));
@@ -216,6 +241,10 @@ void Panel::fileShareMenu(QPoint position) {
                      [this, receipt] { copyFileShare(receipt["stored_path"].toString()); });
   }
   menu.addSeparator();
+  auto clear = menu.addAction("Clear history");
+  clear->setEnabled(fileShare->canClear());
+  clear->setToolTip("Clear this card and its saved links. Uploaded files are kept.");
+  QObject::connect(clear, &QAction::triggered, this, &Panel::clearFileShare);
   QObject::connect(menu.addAction("Open FileShare upload page"), &QAction::triggered, this, [this] {
     if (fileShare) QDesktopServices::openUrl(fileShare->endpoint().resolved(QUrl("/upload.html")));
   });
@@ -281,15 +310,25 @@ bool Panel::fileShareEvent(QEvent *event) {
     if (!fileShareAt(mouse->position())) return false;
     hideTimer.stop();
     if (mouse->button() == Qt::RightButton) fileShareMenu(mouse->globalPosition().toPoint());
-    else if (mouse->button() == Qt::LeftButton) uploadPressed = true;
+    else if (mouse->button() == Qt::LeftButton) {
+      uploadPressed = true;
+      uploadClearPressed = fileShareClearRect().contains(fileShareTransform().inverted().map(mouse->position()).toPoint());
+    }
     return true;
   }
   if (event->type() == QEvent::MouseButtonRelease && uploadPressed) {
     uploadPressed = false;
+    const bool clearPressed = uploadClearPressed;
+    uploadClearPressed = false;
     auto mouse = static_cast<QMouseEvent *>(event);
     if (!fileShareAt(mouse->position())) return true;
     auto local = fileShareTransform().inverted().map(mouse->position());
     auto box = fileShareRect();
+    if (clearPressed) {
+      if (fileShareClearRect().contains(local.toPoint())) clearFileShare();
+      return true;
+    }
+    if (fileShareClearRect().contains(local.toPoint())) return true;
     if (local.y() >= box.bottom() - 30) {
       if (fileShare->busy()) fileShare->cancel();
       else if (!fileShare->currentReceipt().isEmpty()) {

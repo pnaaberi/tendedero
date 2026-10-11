@@ -7,6 +7,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QTimer>
+#include <cerrno>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -238,6 +239,24 @@ void FileShare::cancel() {
   if (current) current->abort();
   settle(uncertain ? "Receipt uncertain" : "Cancelled",
          uncertain ? "Transfer stopped. Check FileShare before uploading again." : QString());
+}
+
+bool FileShare::clearHistory() {
+  if (busy()) return false;
+  // Remove persisted receipts first: a failed clear must not reappear as a
+  // success now and silently restore old links on the next launch.
+  if (::unlink(QFile::encodeName(historyPath).constData()) != 0 && errno != ENOENT) return false;
+  recent = {};
+  completed = {};
+  confirmed = {};
+  description.clear();
+  activeName.clear();
+  activePath.clear();
+  label = "Drop to upload";
+  total = 0;
+  percent = -1;
+  changed();
+  return true;
 }
 
 void FileShare::saveHistory() {
