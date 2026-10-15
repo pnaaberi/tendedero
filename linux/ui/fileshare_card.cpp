@@ -11,14 +11,17 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QTextLayout>
 #include <cmath>
 
 namespace {
 constexpr int cardWidth = 208, cardHeight = 150, rightMargin = 22;
 const QColor paper("#e9f1eb"), ink("#213d30"), accent("#28684e"), peg("#dec198");
+const QColor warningInk("#9b482e"), warningPaper("#fae9e2");
 }
 
 void Panel::setFileShare(FileShare *share) {
@@ -84,7 +87,8 @@ void Panel::paintFileShare(QPainter &p) const {
   p.save();
   p.setTransform(fileShareTransform(), true);
   const bool warning = uploadRejected || (!uploadHover && !fileShare->busy() && !fileShare->detail().isEmpty());
-  const QColor tone = warning ? QColor("#9b482e") : accent;
+  const bool failed = warning && !uploadRejected;
+  const QColor tone = warning ? warningInk : accent;
   p.setPen(Qt::NoPen);
   p.setBrush(QColor(0, 0, 0, 60));
   p.drawRoundedRect(box.adjusted(-3, 4, 3, 7), 10, 10);
@@ -120,19 +124,21 @@ void Panel::paintFileShare(QPainter &p) const {
 
   QRect zone(box.left() + 10, box.top() + 40, box.width() - 20, 72);
   p.setPen(QPen(tone, uploadHover || uploadRejected ? 2 : 1, Qt::DashLine));
-  p.setBrush(uploadRejected ? QColor("#fae9e2") : uploadHover ? QColor("#cce8d5") : QColor("#f5f9f5"));
+  p.setBrush(warning ? warningPaper : uploadHover ? QColor("#cce8d5") : QColor("#f5f9f5"));
   p.drawRoundedRect(zone, 7, 7);
   // A stack of files with a downward arrow makes the whole area a drop target.
-  p.setPen(QPen(tone, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-  p.setBrush(Qt::NoBrush);
-  QRectF sheet(zone.left() + 13, zone.top() + 22, 22, 29);
-  p.drawRoundedRect(sheet.translated(4, -4), 3, 3);
-  p.setBrush(uploadHover ? QColor("#cce8d5") : QColor("#f5f9f5"));
-  p.drawRoundedRect(sheet, 3, 3);
-  QPointF arrow(sheet.center().x(), sheet.top() + 8);
-  p.drawLine(arrow, arrow + QPointF(0, 12));
-  p.drawLine(arrow + QPointF(-4, 8), arrow + QPointF(0, 12));
-  p.drawLine(arrow + QPointF(4, 8), arrow + QPointF(0, 12));
+  if (!failed) {
+    p.setPen(QPen(tone, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    QRectF sheet(zone.left() + 13, zone.top() + 22, 22, 29);
+    p.drawRoundedRect(sheet.translated(4, -4), 3, 3);
+    p.setBrush(uploadHover ? QColor("#cce8d5") : QColor("#f5f9f5"));
+    p.drawRoundedRect(sheet, 3, 3);
+    QPointF arrow(sheet.center().x(), sheet.top() + 8);
+    p.drawLine(arrow, arrow + QPointF(0, 12));
+    p.drawLine(arrow + QPointF(-4, 8), arrow + QPointF(0, 12));
+    p.drawLine(arrow + QPointF(4, 8), arrow + QPointF(0, 12));
+  }
 
   QString title = "Drop files here", detail = "One or many · private";
   if (fileShare->busy()) {
@@ -143,7 +149,7 @@ void Panel::paintFileShare(QPainter &p) const {
     detail = completed > 1 ? "Ready to share" : fileShare->name();
   } else if (!fileShare->detail().isEmpty()) {
     title = fileShare->status();
-    detail = fileShare->name().isEmpty() ? "Open details to review" : fileShare->name();
+    detail = fileShare->detail();
   }
   if (!shareCopyFeedback.isEmpty()) title = shareCopyFeedback;
   if (uploadHover || uploadRejected) {
@@ -154,15 +160,37 @@ void Panel::paintFileShare(QPainter &p) const {
   font.setBold(true);
   p.setFont(font);
   p.setPen(tone);
-  int textWidth = zone.width() - 57;
-  p.drawText(QRect(zone.left() + 49, zone.top() + 14, textWidth, 22), Qt::AlignVCenter,
+  const int textLeft = zone.left() + (failed ? 10 : 49);
+  const int textWidth = zone.right() - textLeft - 7;
+  p.drawText(QRect(textLeft, zone.top() + (failed ? 5 : 14), textWidth, 22), Qt::AlignVCenter,
              p.fontMetrics().elidedText(title, Qt::ElideRight, textWidth));
   font.setPixelSize(10);
   font.setBold(false);
   p.setFont(font);
   p.setPen(ink);
-  p.drawText(QRect(zone.left() + 49, zone.top() + 37, textWidth, 20), Qt::AlignVCenter,
-             p.fontMetrics().elidedText(detail, Qt::ElideMiddle, textWidth));
+  if (failed) {
+    // Give the cause and next step room; longer server explanations remain in Details.
+    QTextLayout layout(detail, font);
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setTextOption(option);
+    layout.beginLayout();
+    qreal y = zone.top() + 29;
+    for (int row = 0; row < 3; ++row) {
+      auto line = layout.createLine();
+      if (!line.isValid()) break;
+      line.setLineWidth(textWidth);
+      if (row == 2)
+        p.drawText(QPointF(textLeft, y + line.ascent()),
+                   p.fontMetrics().elidedText(detail.mid(line.textStart()), Qt::ElideRight, textWidth));
+      else line.draw(&p, QPointF(textLeft, y));
+      y += line.height();
+    }
+    layout.endLayout();
+  } else {
+    p.drawText(QRect(textLeft, zone.top() + 37, textWidth, 20), Qt::AlignVCenter,
+               p.fontMetrics().elidedText(detail, Qt::ElideMiddle, textWidth));
+  }
   if (fileShare->busy() && fileShare->progress() >= 0)
     p.fillRect(zone.left() + 4, zone.bottom() - 4,
                (zone.width() - 8) * fileShare->progress() / 100, 2, accent);
@@ -183,7 +211,7 @@ void Panel::paintFileShare(QPainter &p) const {
     p.drawText(left, Qt::AlignCenter, completed > 1 ? "Copy links" : "Copy link");
     p.drawText(right, Qt::AlignCenter, completed > 1 ? "Copy paths" : "Copy path");
   } else
-    p.drawText(footer, Qt::AlignCenter, fileShare->detail().isEmpty() ? "Choose files…" : "Details / recent uploads…");
+    p.drawText(footer, Qt::AlignCenter, fileShare->detail().isEmpty() ? "Choose files…" : "View upload details…");
   p.restore();
 }
 
@@ -205,13 +233,44 @@ void Panel::chooseFileShare() {
   if (target && !selected.isEmpty()) target->enqueue(selected);
 }
 
+void Panel::showFileShareDetails() {
+  if (!fileShare || fileShare->detail().isEmpty()) return;
+  if (uploadDetails) uploadDetails->close();
+  auto dialog = new QMessageBox(QMessageBox::Warning, "FileShare upload", QString(), QMessageBox::Close);
+  uploadDetails = dialog;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+  // KDE's native message-box helper creates a modal copy even for a nonmodal dialog.
+  dialog->setOption(QMessageBox::Option::DontUseNativeDialog);
+#endif
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setTextFormat(Qt::PlainText);
+  dialog->setText(fileShare->status());
+  QStringList details;
+  if (!fileShare->name().isEmpty()) details << "File: " + fileShare->name();
+  details << fileShare->detail();
+  if (!fileShare->busy() && !fileShare->name().isEmpty() && fileShare->batchTotal() > 1)
+    details << QString("Batch stopped: %1 of %2 uploads confirmed. Later files were not sent.")
+                   .arg(fileShare->batchReceipts().size()).arg(fileShare->batchTotal());
+  details << "Uploading does not delete your original files.";
+  dialog->setInformativeText(details.join("\n\n"));
+  dialog->addButton("Open FileShare", QMessageBox::ActionRole);
+  const QUrl page = fileShare->endpoint().resolved(QUrl("/upload.html"));
+  QObject::connect(dialog, &QMessageBox::buttonClicked, dialog, [dialog, page](QAbstractButton *button) {
+    if (dialog->buttonRole(button) == QMessageBox::ActionRole) QDesktopServices::openUrl(page);
+  });
+  QObject::connect(this, &QObject::destroyed, dialog, &QWidget::close);
+  dialog->setModal(false);
+  dialog->show();
+}
+
 void Panel::fileShareMenu(QPoint position) {
   if (!fileShare) return;
   QMenu menu;
   if (!fileShare->detail().isEmpty()) {
     if (!fileShare->name().isEmpty())
-      menu.addAction("Stopped at: " + fileShare->name().left(100).replace('&', "&&"))->setEnabled(false);
-    menu.addAction(fileShare->detail())->setEnabled(false);
+      menu.addAction((fileShare->busy() ? "Uploading: " : "Stopped at: ") +
+                     fileShare->name().left(100).replace('&', "&&"))->setEnabled(false);
+    QObject::connect(menu.addAction("Upload details…"), &QAction::triggered, this, &Panel::showFileShareDetails);
     menu.addSeparator();
   }
   QObject::connect(menu.addAction("Upload files…"), &QAction::triggered, this, &Panel::chooseFileShare);
@@ -336,9 +395,9 @@ bool Panel::fileShareEvent(QEvent *event) {
         QString key = local.x() < box.center().x() ? "download_url" : "stored_path";
         for (auto receipt : fileShare->batchReceipts()) results.append(receipt.toObject()[key].toString());
         copyFileShare(results.join('\n'));
-      } else if (!fileShare->detail().isEmpty()) fileShareMenu(mouse->globalPosition().toPoint());
+      } else if (!fileShare->detail().isEmpty()) showFileShareDetails();
       else chooseFileShare();
-    } else if (!fileShare->detail().isEmpty()) fileShareMenu(mouse->globalPosition().toPoint());
+    } else if (!fileShare->detail().isEmpty()) showFileShareDetails();
     else chooseFileShare();
     return true;
   }

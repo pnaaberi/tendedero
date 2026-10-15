@@ -9,6 +9,7 @@
 #include <QVariantAnimation>
 #include <functional>
 class QMenu;
+class QMessageBox;
 class QPainter;
 class FileShare;
 
@@ -73,6 +74,7 @@ private:
   qint64 flexAt = 0;
   qreal flexStrength = 0;
   QPointer<FileShare> fileShare;
+  QPointer<QMessageBox> uploadDetails;
   bool captureSuppressed = false, uploadHover = false, uploadPressed = false, uploadRejected = false;
   bool uploadClearPressed = false;
   QString shareCopyFeedback, uploadDropTitle, uploadDropDetail;
@@ -83,6 +85,7 @@ private:
   void paintFileShare(QPainter &painter) const;
   bool fileShareEvent(QEvent *event);
   void fileShareMenu(QPoint position);
+  void showFileShareDetails();
   void chooseFileShare();
   void copyFileShare(const QString &text);
   QRect sensor() const;

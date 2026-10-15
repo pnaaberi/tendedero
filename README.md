@@ -113,15 +113,21 @@ and a cancel action on the card. You can add files while a batch runs (up to
 Uploads continue in the background when the shelf is hidden.
 Files must contain 1 byte–4 GiB; directories, symlinks and remote URLs are
 rejected. Dropping copies file bytes and always retains the original. Cancelling
-or losing the connection after transmission starts leaves reception uncertain:
-check the upload page before retrying. A failure stops the remaining batch.
+or losing the connection after transmission starts shows **Upload unconfirmed**:
+the file may already be on FileShare, so check the upload page before retrying.
+A failure stops the remaining batch. The card shows the cause and next step;
+click it or **View upload details…** for the filename, full explanation and an
+**Open FileShare** button. **Server storage low** means the server's free-space
+reserve blocked the upload; **Upload storage full** means its intake quota was
+reached. Both require space to be freed on the server before trying again.
 
 After a confirmed upload, **Copy link** copies the private download URL and
 **Copy path** copies the exact path on the server for an agent running there.
 For a completed batch, **Copy links / Copy paths** copy all its confirmed
-results, one per line in upload order. If a batch stops partway, the card
-identifies the stopped file. Its right-click menu can copy all confirmed batch
-results, and also provides individually named recent uploads.
+results, one per line in upload order. If a batch stops partway, click the card
+to see the stopped file. Its right-click menu can copy all confirmed batch
+results, and also provides individually named recent uploads. Failure details
+show the stopped filename and how many uploads were confirmed.
 Older successful results remain in the card's menu, labelled by filename; ten
 recent receipts survive restart. Links require the FileShare owner's permitted
 Tailscale identity. Uploaded files remain untrusted and are retrieved as

@@ -105,6 +105,18 @@ history removal, busy-upload protection, disk errors and uploading again after
 clearing, without server requests. Optional `PEGLINE_TEST_RENDER_DIR` saves only
 synthetic card renders from that fixture for visual review.
 
+Structured HTTP 507 `disk_reserve` and `intake_full` refusals show their storage
+cause and next step directly on the card. Unknown or malformed server errors
+show **Upload unconfirmed** and advise checking FileShare before another send.
+Clicking a failed card or its details action opens a nonmodal, plain-text
+dialog with the filename, full explanation, batch counts and an upload-page
+button. The local fixture covers these interactions, pre-upload access and
+connection failures, empty rejection messages, both storage refusals, stopped
+batches and no automatic retry, plus a mixed
+PDF/ZIP/PNG/text/extensionless drop with escaped filenames and binary payloads
+larger than 64 KiB and 1 MiB, checking exact bytes, lengths, receipt hashes and
+retained originals.
+
 The explicit live integration check creates one harmless text upload and uses
 the real Wayland clipboard. It injects native Qt drop/mouse events; compositor
 delivery from another application's actual drag is a separate manual check.

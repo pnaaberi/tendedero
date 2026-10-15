@@ -144,10 +144,14 @@ void FileShare::next() {
     auto body = current->read(maxReplyBytes + 1);
     QRegularExpression token("<meta\\s+name=[\"']csrf-token[\"']\\s+content=[\"']([A-Za-z0-9_-]+)[\"']");
     auto match = token.match(QString::fromUtf8(body));
+    int code = current->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     if (current->error() != QNetworkReply::NoError ||
-        current->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200 ||
+        code != 200 ||
         body.size() > maxReplyBytes || !match.hasMatch()) {
-      settle("Cannot connect", "Check Tailscale, the FileShare address and owner access.");
+      if (code == 401 || code == 403)
+        settle("Access denied", "File was not sent. Check your FileShare owner access.");
+      else
+        settle("Cannot connect", "File was not sent. Check Tailscale and the FileShare address.");
       return;
     }
     post(match.captured(1).toLatin1());
@@ -196,9 +200,17 @@ void FileShare::post(const QByteArray &csrf) {
       saveHistory();
       settle("Uploaded");
     } else if (code >= 400 && code < 500 && receipt["status"] == "error") {
-      settle("Upload rejected", receipt["message"].toString().left(400));
+      const QString reason = receipt["message"].toString().trimmed().left(400);
+      settle("Upload rejected", "File was not uploaded. " +
+          (reason.isEmpty() ? "FileShare rejected the request." : reason));
+    } else if (code == 507 && body.size() <= maxReplyBytes && receipt["status"] == "error" &&
+               (receipt["code"] == "disk_reserve" || receipt["code"] == "intake_full")) {
+      settle(receipt["code"] == "disk_reserve" ? "Server storage low" : "Upload storage full",
+          receipt["code"] == "disk_reserve" ?
+          "File was not uploaded. Free space on the server, then try again." :
+          "File was not uploaded. Remove unneeded uploads on the server, then try again.");
     } else {
-      settle("Receipt uncertain", "Check the FileShare upload page before sending this file again.");
+      settle("Upload unconfirmed", "The file may already be on FileShare. Check uploads before sending it again.");
     }
   });
   changed();
@@ -237,8 +249,8 @@ void FileShare::cancel() {
   auto current = reply;
   reply.clear();
   if (current) current->abort();
-  settle(uncertain ? "Receipt uncertain" : "Cancelled",
-         uncertain ? "Transfer stopped. Check FileShare before uploading again." : QString());
+  settle(uncertain ? "Upload unconfirmed" : "Cancelled",
+         uncertain ? "Transfer stopped. The file may already be on FileShare. Check uploads before sending it again." : QString());
 }
 
 bool FileShare::clearHistory() {

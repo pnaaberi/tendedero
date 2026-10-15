@@ -36,6 +36,29 @@ Status, history, and journal output can contain personal image paths. Redact
 them before opening a public issue; do not paste raw state files or desktop
 captures into GitHub.
 
+## FileShare upload fails
+
+The card shows the cause and next step. Click it or **View upload details…**
+to see the affected filename, full explanation and batch progress, or use
+**Open FileShare** to check the server's upload page.
+
+- **Server storage low:** the server's free-space reserve blocked the upload.
+  Free space on the server, then send the file again. Clearing Pegline history
+  does not free server space.
+- **Upload storage full:** the server's upload intake quota was reached.
+  Remove unneeded uploads on the server before trying again.
+- **Access denied:** check that your Tailscale identity has FileShare owner
+  access. The file was not sent.
+- **Cannot connect:** check Tailscale, the FileShare address and server
+  availability. The file was not sent.
+- **Upload unconfirmed:** the file may already be on the server. Check the
+  upload page before sending again to avoid a duplicate.
+
+A failure stops the batch; later files are not automatically sent or retried.
+Already confirmed uploads remain available in the right-click menu. Uploading
+never deletes the original files. PDF, ZIP and other formats use the same
+transfer path; the regular-file and size limits apply to every format.
+
 ## Meta+Shift+S opens Spectacle or does nothing
 
 1. Confirm `pegline.service` is active. Find Pegline in the tray's expanded
